@@ -53,8 +53,8 @@ THE SOFTWARE.
 #include <complex>
 #include <cstring>
 #include <string>
+#include <algorithm>
 #include <limits>
 #include <vector>
-#include <algorithm>
 
 #endif

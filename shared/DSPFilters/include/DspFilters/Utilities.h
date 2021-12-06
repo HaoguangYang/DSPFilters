@@ -764,7 +764,7 @@ public:
 		n--;
 		Value cur = *src++;
 		Value diff = std::abs (cur - m_prev[i]);
-		m_slope [i] = std::max (diff, m_slope[i]);
+		m_slope [i] = (std::max)(diff, m_slope[i]);
 		m_prev [i] = cur;
 	  }
 	}
