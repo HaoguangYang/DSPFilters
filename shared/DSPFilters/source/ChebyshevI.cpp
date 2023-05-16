@@ -68,8 +68,8 @@ void AnalogLowPass::design (int numPoles,
       const int k = 2 * i + 1 - numPoles;
       double a = sinh_v0 * cos (k * doublePi / n2);
       double b = cosh_v0 * sin (k * doublePi / n2);
-      assert(!isinf(a));
-      assert(!isinf(b));
+      assert(!std::isinf(a));
+      assert(!std::isinf(b));
 
       //addPoleZero (complex_t (a, b), infinity());
       //addPoleZero (complex_t (a, -b), infinity());

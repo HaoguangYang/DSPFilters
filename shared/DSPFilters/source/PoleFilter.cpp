@@ -266,18 +266,18 @@ BandStopTransform::BandStopTransform (double fc,
     const PoleZeroPair& pair = analog[i];
 
 #ifndef NDEBUG
-    assert(!isinf(pair.poles.first.real()));
-    assert(!isinf(pair.poles.first.imag()));
+    assert(!std::isinf(pair.poles.first.real()));
+    assert(!std::isinf(pair.poles.first.imag()));
 #endif
 
     ComplexPair p  = transform (pair.poles.first);
     ComplexPair z  = transform (pair.zeros.first);
 
 #ifndef NDEBUG
-    assert(!isinf(p.first.real()));
-    assert(!isinf(p.first.imag()));
-    assert(!isinf(z.first.real()));
-    assert(!isinf(z.first.imag()));
+    assert(!std::isinf(p.first.real()));
+    assert(!std::isinf(p.first.imag()));
+    assert(!std::isinf(z.first.real()));
+    assert(!std::isinf(z.first.imag()));
 #endif
 
     //

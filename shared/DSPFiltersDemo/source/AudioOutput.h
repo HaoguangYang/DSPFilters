@@ -39,6 +39,7 @@ THE SOFTWARE.
 #include "Common.h"
 #include "ThreadQueue.h"
 #include "FilteringAudioSource.h"
+#include "bond.h"
 
 /*
  * Handles Audio Output. Allows insertion of one Dsp::Filter

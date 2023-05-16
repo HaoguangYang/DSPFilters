@@ -529,7 +529,7 @@ void zero (int samples,
            Ty* dest,
            int destSkip = 0)
 {
-  detail::zero<Ty, tr1::is_pod<Ty>::value>::process (samples, dest, destSkip );
+  detail::zero<Ty, std::is_pod<Ty>::value>::process (samples, dest, destSkip );
 }
 
 #else
@@ -764,7 +764,7 @@ public:
 		n--;
 		Value cur = *src++;
 		Value diff = std::abs (cur - m_prev[i]);
-		m_slope [i] = std::max (diff, m_slope[i]);
+		m_slope [i] = (std::max)(diff, m_slope[i]);
 		m_prev [i] = cur;
 	  }
 	}

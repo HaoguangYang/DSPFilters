@@ -91,7 +91,7 @@ private:
     m_originalConstrainer->resizeEnd();
   }
 
-  void applyBoundsToComponent (Component* component,
+  void applyBoundsToComponent (Component& component,
                                const Rectangle<int>& bounds)
   {
     m_originalConstrainer->applyBoundsToComponent (component, bounds);

@@ -59,8 +59,8 @@ void AnalogLowPass::design (int numPoles)
     for (int i = 0; i < pairs; ++i)
     {
       complex_t c = std::polar (1., doublePi_2 + (2 * i + 1) * doublePi / n2);
-      assert(!isinf(c.real()));
-      assert(!isinf(c.imag()));
+      assert(!std::isinf(c.real()));
+      assert(!std::isinf(c.imag()));
       addPoleZeroConjugatePairs (c, infinity());
     }
 

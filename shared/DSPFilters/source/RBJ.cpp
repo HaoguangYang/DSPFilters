@@ -155,13 +155,13 @@ void HighShelf::setup (double sampleRate,
   double cs = std::cos (w0);
   double sn = std::sin (w0);
   double AL = sn / 2 * ::std::sqrt ((A + 1/A) * (1/shelfSlope - 1) + 2);
-  double sq = 2 * std::sqrt(A) * AL;
-  double b0 =    A*( (A+1) - (A-1)*cs + sq );
-  double b1 = -2*A*( (A-1) - (A+1)*cs );
-  double b2 =    A*( (A+1) - (A-1)*cs - sq );
-  double a0 =        (A+1) + (A-1)*cs + sq;
-  double a1 =    2*( (A-1) + (A+1)*cs );
-  double a2 =        (A+1) + (A-1)*cs - sq;
+  double sq = 2 * sqrt(A) * AL;
+  double b0 =    A*( (A+1) + (A-1)*cs + sq );
+  double b1 = -2*A*( (A-1) + (A+1)*cs );
+  double b2 =    A*( (A+1) + (A-1)*cs - sq );
+  double a0 =        (A+1) - (A-1)*cs + sq;
+  double a1 =    2*( (A-1) - (A+1)*cs );
+  double a2 =        (A+1) - (A-1)*cs - sq;
   setCoefficients (a0, a1, a2, b0, b1, b2);
 }
 
@@ -176,7 +176,7 @@ void BandShelf::setup (double sampleRate,
   double sn = std::sin(w0);
   double AL = sn * std::sinh( doubleLn2/2 * bandWidth * w0/sn );
   assert (!Dsp::is_nan (AL));
-  assert (!isinf (AL));
+  assert (!std::isinf (AL));
   double b0 =  1 + AL * A;
   double b1 = -2 * cs;
   double b2 =  1 - AL * A;

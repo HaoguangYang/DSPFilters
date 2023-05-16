@@ -297,8 +297,8 @@ Filter family namespaces
 #include <iomanip>
 
 namespace {
-
-__unused void UsageExamples ()
+#if 0
+void UsageExamples ()
 {
   // create a two channel audio buffer
   int numSamples = 2000;
@@ -458,5 +458,5 @@ __unused void UsageExamples ()
     std::cout << os.str();
   }
 }
-
+#endif
 }
