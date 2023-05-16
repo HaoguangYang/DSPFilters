@@ -30,3 +30,14 @@ DerivedData
 #
 # Pods/
 shared/DSPFilters/Builds/XCode4/DSPFilters.xcodeproj/xcshareddata
+
+# build artifacts
+**/CMakeFiles/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+*.a
+*.o
+*.so
+*.exe
+shared/DSPFiltersDemo/DSPFiltersDemo_exe_artefacts/
