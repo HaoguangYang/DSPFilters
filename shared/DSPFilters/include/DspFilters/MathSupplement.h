@@ -40,42 +40,44 @@ THE SOFTWARE.
 
 namespace Dsp {
 
-const double doublePi   =3.1415926535897932384626433832795028841971;
-const double doublePi_2	=1.5707963267948966192313216916397514420986;
-const double doubleLn2  =0.69314718055994530941723212145818;//?????
-const double doubleLn10	=2.3025850929940456840179914546844;//??????
+const double doublePi   = M_PIf64;
+const double doublePi_2	= M_PI_2f64;
+const double doubleLn2  = std::log(2.);
+const double doubleLn10	= std::log(10.);
 
-typedef std::complex<double> complex_t;
-typedef std::pair<complex_t, complex_t> complex_pair_t;
-
-template<typename Real>
-inline std::complex<Real> solve_quadratic_1 (Real a, Real b, Real c)
-{
-  return (-b + sqrt (std::complex<Real> (b*b - 4*a*c, 0))) / (2. * a);
-}
+template <typename Real>
+using complex_pair_t = std::pair<std::complex<Real>, std::complex<Real>>;
 
 template<typename Real>
-inline std::complex<Real> solve_quadratic_2 (Real a, Real b, Real c)
+inline std::complex<Real> solve_quadratic_1 (const Real& a, const Real& b, const Real& c)
 {
-  return (-b - sqrt (std::complex<Real> (b*b - 4*a*c, 0))) / (2. * a);
+  return (-b + std::sqrt (std::complex<Real> (b*b - 4*a*c, 0))) / (2. * a);
 }
 
-inline const complex_t infinity()
+template<typename Real>
+inline std::complex<Real> solve_quadratic_2 (const Real& a, const Real& b, const Real& c)
 {
-  return complex_t (std::numeric_limits<double>::infinity());
+  return (-b - std::sqrt (std::complex<Real> (b*b - 4*a*c, 0))) / (2. * a);
 }
 
-inline const complex_t adjust_imag (const complex_t& c)
+template<typename Real>
+inline const std::complex<Real> infinity()
 {
-  if (fabs (c.imag()) < 1e-30)
-    return complex_t (c.real(), 0);
+  return std::complex<Real>(std::numeric_limits<Real>::infinity());
+}
+
+template<typename Real>
+inline const std::complex<Real> adjust_imag (const std::complex<Real>& c)
+{
+  if (std::fabs (c.imag()) < 1e-30)
+    return std::complex<Real>(c.real(), 0.);
   else
     return c;
 }
 
 template <typename Ty, typename To>
 inline std::complex<Ty> addmul (const std::complex<Ty>& c,
-                                Ty v,
+                                const Ty& v,
                                 const std::complex<To>& c1)
 {
   return std::complex <Ty> (
@@ -91,27 +93,36 @@ inline std::complex<Ty> recip (const std::complex<Ty>& c)
 }
 
 template <typename Ty>
-inline Ty asinh (Ty x)
+inline Ty asinh (const Ty& x)
 {
-  return log (x + std::sqrt (x * x + 1 ));
+  return std::asinh (x);
 }
 
 template <typename Ty>
-inline Ty acosh (Ty x)
+inline Ty acosh (const Ty& x)
 {
-  return log (x + std::sqrt (x * x - 1));
+  return std::acosh (x);
 }
 
 template <typename Ty>
-inline bool is_nan (Ty v)
+inline bool isnan (const Ty& v)
 {
   return !(v == v);
 }
 
 template <>
-inline bool is_nan<complex_t> (complex_t v)
+inline bool isnan (const float& v) { return std::isnan(v); }
+
+template <>
+inline bool isnan (const double& v) { return std::isnan(v); }
+
+template <>
+inline bool isnan (const long double& v) { return std::isnan(v); }
+
+template <typename FP>
+inline bool isnan (const std::complex<FP>& v)
 {
-  return Dsp::is_nan (v.real()) || Dsp::is_nan (v.imag());
+  return Dsp::isnan (v.real()) || Dsp::isnan (v.imag());
 }
 
 //------------------------------------------------------------------------------

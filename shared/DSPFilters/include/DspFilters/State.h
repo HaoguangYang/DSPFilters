@@ -57,6 +57,12 @@ union __m128_buggy_gxx_up_to_4_7 {
 #include <stdexcept>
 #include <iterator>
 
+#include <deque>
+#include <initializer_list>
+#include <vector>
+#include <numeric>
+#include <memory>
+
 namespace Dsp {
 
 /*
@@ -64,6 +70,97 @@ namespace Dsp {
  * process channels of actual sample data.
  *
  */
+
+/**
+ * @brief A ring buffer data structure to store state data of each channel
+ * 
+ * @tparam T data type
+ */
+template <typename T>
+class RingBuffer {
+ public:
+  RingBuffer(const size_t& capacity) : buffer_(capacity), capacity_(std::min(capacity, buffer_.max_size())) {
+    buffer_.clear();
+  }
+
+  void enqueue(const T& item) {
+    if (isFull()) {
+      buffer_.pop_back(); // Remove the tail item to make space
+    }
+    buffer_.push_front(item);
+  }
+
+  void enqueue(const std::initializer_list<T>& items) {
+    for (const auto& item : items) {
+      enqueue(item);
+    }
+  }
+
+  T dequeue() {
+    if (isEmpty()) {
+      return T();
+    }
+
+    T item = buffer_.back();
+    buffer_.pop_back();
+    return item;
+  }
+
+  std::vector<T> dequeue(const size_t& N) {
+    std::vector<T> lastElements;
+    for (size_t n = 0; n < N && !isEmpty(); n++) {
+      lastElements.push_back(buffer_.back());
+      buffer_.pop_back();
+    }
+    return lastElements;
+  }
+
+  void clear() { buffer_.clear(); }
+
+  void resize(const size_t& newCapacity) {
+    capacity_ = newCapacity;
+    if (buffer_.size() > newCapacity)
+      buffer_.resize(newCapacity);
+  }
+
+  bool isEmpty() const {
+    return buffer_.empty();
+  }
+
+  bool isFull() const {
+    return buffer_.size() == capacity_;
+  }
+
+  size_t getSize() const {
+    return buffer_.size();
+  }
+
+  std::vector<T> getAllElements() const {
+    return std::vector<T>(buffer_.begin(), buffer_.end());
+  }
+
+  std::deque<T> getRawBuffer() const { return buffer_; }
+
+  T& operator[](size_t index) {
+    return buffer_[index];
+  }
+
+  const T& operator[](size_t index) const {
+    return buffer_[index];
+  }
+
+  T* begin() {
+    return buffer_.begin();
+  }
+
+  T* end() {
+    return buffer_.end();
+  }
+
+ private:
+  std::deque<T> buffer_;
+  size_t capacity_;
+};
 
 //------------------------------------------------------------------------------
 
@@ -75,114 +172,62 @@ namespace Dsp {
  *  y[n] = (b0/a0)*x[n] + (b1/a0)*x[n-1] + (b2/a0)*x[n-2]
  *                      - (a1/a0)*y[n-1] - (a2/a0)*y[n-2]  
  */
-template <class FP, bool Simd =
-#ifdef __ARM_NEON__
-    true
-#else
-    false
-#endif
-    >
+template <class FP>
 class DirectFormI
 {
 public:
   typedef FP FPType;
-  static constexpr bool HasSimd = Simd;
+
+  DirectFormI(const BiquadBase<FP>& s) : m_coeffs_(s) {
+    size_t N1 = s.m_b.size();
+    size_t M1 = s.m_a.size();
+    assert(M1 > 0 && s.m_a[0] == 1. && "ERROR: First term of the denominator should be normalized to 1.");
+    m_x_ = std::make_unique<RingBuffer<FP>>(N1);
+    m_y_ = std::make_unique<RingBuffer<FP>>(M1-1);
+    reset();
+  }
 
   DirectFormI ()
   {
+    m_x_ = std::make_unique<RingBuffer<FP>>(3);
+    m_y_ = std::make_unique<RingBuffer<FP>>(2);
     reset();
   }
 
   void reset ()
   {
-#ifdef __SSE3__
-    m_xy = _mm_setzero_ps();
-#elif defined(__ARM_NEON__)
-    m_xy = vdupq_n_f32(0);
-#endif
-    m_x1 = FP();
-    m_x2 = FP();
-    m_y1 = FP();
-    m_y2 = FP();
+    m_x_->clear();
+    m_y_->clear();
   }
 
-#ifdef __SSE3__
-  inline __m128 process1Simd (const __m128 in,
-#elif defined(__ARM_NEON__)
-  inline float32x2_t process1Simd (const float32x2_t in,
-#else
-  inline FP process1Simd (const FP in,
-#endif
-                          const BiquadBase& s,
-#ifdef __SSE3__
-                          const __m128 vsa) // very small amount
-#elif defined(__ARM_NEON__)
-                          const float32x2_t vsa) // very small amount
-#else
-                          const FP vsa) // very small amount
-#endif
+  inline FP process1 (const FP& in,
+                      const BiquadBase<FP>& s,
+                      const FP& vsa) // very small amount
   {
-#ifdef __SSE3__
-    const __m128 neg = _mm_set_ps(1, 1, -1, -1);
-    __m128 tmp = _mm_mul_ps(s.m_vab12, m_xy);
-    tmp = _mm_mul_ps(tmp, neg);
-    tmp = _mm_hadd_ps(tmp, tmp);
-    tmp = _mm_hadd_ps(tmp, tmp);
-    tmp = _mm_add_ps(tmp, vsa);
-    __m128 out = _mm_mul_ps(in, s.m_vb0);
-    out = _mm_add_ps(out, tmp);
-#if (__GNUC__ == 4 && __GNUC_MINOR__ < 8)
-    __m128_buggy_gxx_up_to_4_7 m_xy_e, in_e, out_e;
-    m_xy_e.v = m_xy;
-    in_e.v = in;
-    out_e.v = out;
-    m_xy = _mm_set_ps(m_xy_e.e[2], in_e.e[0], m_xy_e.e[0], out_e.e[0]);
-#else
-    m_xy = _mm_set_ps(m_xy[2], in[0], m_xy[0], out[0]);
-#endif
-    return out;
-#elif defined(__ARM_NEON__)
-    const float32x4_t neg = { 1, -1, 1, -1 };
-    float32x4_t tmp = vmulq_f32(s.m_vab12, m_xy);
-    tmp = vmulq_f32(tmp, neg);
-    float32x2_t sum = vpadd_f32(vget_low_f32(tmp), vget_high_f32(tmp));
-    sum = vpadd_f32(sum, sum);
-    float32x2_t out = vmla_f32(sum, s.m_vb0, in);
-    out = vadd_f32(out, vsa);
-    float32x2_t inout = vtrn_f32(in, out).val[0];
-    m_xy = vcombine_f32(inout, vget_low_f32(m_xy));
-    return out;
-#else
-    return in;
-#endif
-  }
-
-  inline FP process1 (const FP in,
-                      const BiquadBase& s,
-                      const FP vsa) // very small amount
-  {
-    FP out = s.m_b0*in + s.m_b1*m_x1 + s.m_b2*m_x2
-                       - s.m_a1*m_y1 - s.m_a2*m_y2
+    m_x_->enqueue(in);
+    FP out = s.m_b[0]*m_x_[0] + s.m_b[1]*m_x_[1] + s.m_b[2]*m_x_[2]
+                       - s.m_a[1]*m_y_[0] - s.m_a[2]*m_y_[1];
              + vsa;
-    m_x2 = m_x1;
-    m_y2 = m_y1;
-    m_x1 = in;
-    m_y1 = out;
+    m_y_->enqueue(out);
+    return out;
+  }
+
+  inline FP process1 (const FP& in, const FP& vsa) // very small amount
+  {
+    m_x_->enqueue(in);
+    FP out = std::transform_reduce(m_coeffs_.m_b.begin(), m_coeffs_.m_b.end(), m_x_->begin(), FP(0),
+                                 std::plus<FP>(), std::multiplies<FP>());
+    out -= std::transform_reduce(m_coeffs_.m_a.begin()+1, m_coeffs_.m_a.end(), m_y_->begin(), -vsa,
+                                 std::plus<FP>(), std::multiplies<FP>());
+    m_y_->enqueue(out);
     return out;
   }
 
 protected:
-#ifdef __SSE3__
-                //   3     2     1     0
-  __m128 m_xy;  // [m_x2  m_x1  m_y2  m_y1]
-#elif defined(__ARM_NEON__)
-                     //   3     2     1     0
-  float32x4_t m_xy;  // [m_x2  m_y2  m_x1  m_y1]
-#endif
-  FP m_x2; // x[n-2]
-  FP m_y2; // y[n-2]
-  FP m_x1; // x[n-1]
-  FP m_y1; // y[n-1]
+  std::unique_ptr<RingBuffer<FP>> m_x_; // Ring buffer for x[n]...x[n-N]
+  std::unique_ptr<RingBuffer<FP>> m_y_; // Ring buffer for y[n-1]...y[n-M]
+
+  BiquadBase<FP> m_coeffs_;
 };
 
 //------------------------------------------------------------------------------
@@ -214,12 +259,12 @@ public:
     m_v2 = FP();
   }
 
-  FP process1 (const FP in,
-               const BiquadBase& s,
-               const FP vsa)
+  FP process1 (const FP& in,
+               const BiquadBase<FP>& s,
+               const FP& vsa)
   {
-    FP w   = in - s.m_a1*m_v1 - s.m_a2*m_v2 + vsa;
-    FP out =      s.m_b0*w    + s.m_b1*m_v1 + s.m_b2*m_v2;
+    FP w   = in - s.m_a[1]*m_v1 - s.m_a[2]*m_v2 + vsa;
+    FP out =      s.m_b[0]*w    + s.m_b[1]*m_v1 + s.m_b[2]*m_v2;
 
     m_v2 = m_v1;
     m_v1 = w;
@@ -270,20 +315,20 @@ public:
     m_s4_1 = FP();
   }
 
-  template <typename Sample>
+  template <typename Sample, typename FP>
   inline Sample process1 (const Sample in,
-                          const BiquadBase& s,
-                          const double /*vsa*/)
+                          const BiquadBase<FP>& s,
+                          const double vsa)
   {
     FP out;
 
     // can be: in += m_s1_1;
     m_v = in + m_s1_1;
-    out = s.m_b0*m_v + m_s3_1;
-    m_s1 = m_s2_1 - s.m_a1*m_v;
-    m_s2 = -s.m_a2*m_v;
-    m_s3 = s.m_b1*m_v + m_s4_1;
-    m_s4 = s.m_b2*m_v; 
+    out = s.m_b[0]*m_v + m_s3_1 + vsa;
+    m_s1 = m_s2_1 - s.m_a[1]*m_v;
+    m_s2 = -s.m_a[2]*m_v;
+    m_s3 = s.m_b[1]*m_v + m_s4_1;
+    m_s4 = s.m_b[2]*m_v; 
 
     m_s4_1 = m_s4;
     m_s3_1 = m_s3;
@@ -326,16 +371,16 @@ public:
     m_s2_1 = FP();
   }
 
-  template <typename Sample>
+  template <typename Sample, typename FP>
   inline Sample process1 (const Sample in,
-                          const BiquadBase& s,
+                          const BiquadBase<FP>& s,
                           const FP vsa)
   {
     FP out;
 
-    out = m_s1_1 + s.m_b0*in + vsa;
-    m_s1 = m_s2_1 + s.m_b1*in - s.m_a1*out;
-    m_s2 = s.m_b2*in - s.m_a2*out;
+    out = m_s1_1 + s.m_b[0]*in + vsa;
+    m_s1 = m_s2_1 + s.m_b[1]*in - s.m_a[1]*out;
+    m_s2 = s.m_b[2]*in - s.m_a[2]*out;
     m_s1_1 = m_s1;
     m_s2_1 = m_s2;
 

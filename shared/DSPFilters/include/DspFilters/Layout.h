@@ -48,6 +48,7 @@ namespace Dsp {
 //
 
 // Base uses pointers to reduce template instantiations
+template <typename FP>
 class LayoutBase
 {
 public:
@@ -57,14 +58,15 @@ public:
   {
   }
 
-  LayoutBase (int maxPoles, PoleZeroPair* pairs)
+  LayoutBase (int maxPoles, PoleZeroPair<FP>* pairs)
     : m_numPoles (0)
     , m_maxPoles (maxPoles)
     , m_pair (pairs)
   {
   }
 
-  void setStorage (const LayoutBase& other)
+  template <typename FP2>
+  void setStorage (const LayoutBase<FP2>& other)
   {
     m_numPoles = 0;
     m_maxPoles = other.m_maxPoles;
@@ -145,7 +147,7 @@ protected:
 
 private:
   int m_maxPoles;
-  PoleZeroPair* m_pair;
+  PoleZeroPair<FP>* m_pair;
   double m_normalW;
   double m_normalGain;
 };

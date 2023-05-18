@@ -36,19 +36,11 @@ THE SOFTWARE.
 #ifndef DSPFILTERS_BIQUAD_H
 #define DSPFILTERS_BIQUAD_H
 
-#ifdef __SSE3__
-#include <pmmintrin.h>
-#elif defined(__ARM_NEON__)
-#include <arm_neon.h>
-#endif
-
 #include "DspFilters/Common.h"
 #include "DspFilters/MathSupplement.h"
 #include "DspFilters/Types.h"
 
 namespace Dsp {
-
-struct BiquadPoleState;
 
 /*
  * Holds coefficients for a second order Infinite Impulse Response
@@ -57,6 +49,7 @@ struct BiquadPoleState;
  */
 
 // Factored interface to prevent outsiders from fiddling
+template <typename FP>
 class BiquadBase
 {
 public:
@@ -64,7 +57,7 @@ public:
   struct State : StateType, private DenormalPrevention
   {
     template <typename Sample>
-    inline Sample process (const Sample in, const BiquadBase& b)
+    inline Sample process (const Sample& in, const BiquadBase<FP>& b)
     {
       return static_cast<Sample> (StateType::process1 (in, b, ac()));
     }
@@ -72,16 +65,16 @@ public:
 
 public:
   // Calculate filter response at the given normalized frequency.
-  complex_t response (double normalizedFrequency) const;
+  std::complex<FP> response (const FP& normalizedFrequency) const;
 
-  std::vector<PoleZeroPair> getPoleZeros () const;
+  std::vector<PoleZeroPair<FP>> getPoleZeros () const;
 
   double getA0 () const { return m_a0; }
-  double getA1 () const { return m_a1*m_a0; }
-  double getA2 () const { return m_a2*m_a0; }
-  double getB0 () const { return m_b0*m_a0; }
-  double getB1 () const { return m_b1*m_a0; }
-  double getB2 () const { return m_b2*m_a0; }
+  double getA1 () const { return m_a[1]*m_a0; }
+  double getA2 () const { return m_a[2]*m_a0; }
+  double getB0 () const { return m_b[0]*m_a0; }
+  double getB1 () const { return m_b[1]*m_a0; }
+  double getB2 () const { return m_b[2]*m_a0; }
 
   // Process a block of samples in the given form
   template <class StateType, typename Sample>
@@ -98,15 +91,15 @@ protected:
   // These are protected so you can't mess with RBJ biquads
   //
 
-  void setCoefficients (double a0, double a1, double a2,
-                        double b0, double b1, double b2);
+  void setCoefficients (const FP& a0, const FP& a1, const FP& a2,
+                        const FP& b0, const FP& b1, const FP& b2);
 
-  void setOnePole (complex_t pole, complex_t zero);
+  void setOnePole (const std::complex<FP>& pole, const std::complex<FP>& zero);
 
-  void setTwoPole (complex_t pole1, complex_t zero1,
-                   complex_t pole2, complex_t zero2);
+  void setTwoPole (const std::complex<FP>& pole1, const std::complex<FP>& zero1,
+                   const std::complex<FP>& pole2, const std::complex<FP>& zero2);
 
-  void setPoleZeroPair (const PoleZeroPair& pair)
+  void setPoleZeroPair (const PoleZeroPair<FP>& pair)
   {
     if (pair.isSinglePole ())
       setOnePole (pair.poles.first, pair.zeros.first);
@@ -115,52 +108,43 @@ protected:
                   pair.poles.second, pair.zeros.second);
   }
 
-  void setPoleZeroForm (const BiquadPoleState& bps);
+  void setPoleZeroForm (const BiquadPoleState<FP>& bps)
+  {
+    setPoleZeroPair (bps);
+    applyScale (bps.gain);
+  }
 
-  void setIdentity ();
+  void setIdentity () { setCoefficients (1., 0., 0., 1., 0., 0.); };
 
-  void applyScale (double scale);
+  void applyScale (const FP& scale) { setCoefficients(m_a0, m_a[1], m_a[2], m_b[0] * scale, m_b[1] * scale, m_b[2] * scale); };
 
 public:
-  #ifdef __SSE3__
-                   //   3     2     1     0
-  __m128 m_vab12;  // [m_b2  m_b1  m_a2  m_a1]
-  __m128 m_va0;    // [m_a0  m_a0  m_a0  m_a0]
-  __m128 m_vb0;    // [m_b0  m_b0  m_b0  m_b0]
-#elif defined(__ARM_NEON__)
-                        //   3     2     1     0
-  float32x4_t m_vab12;  // [m_b2  m_a2  m_b1  m_a1]
-  float32x2_t m_va0;    // [m_a0  m_a0]
-  float32x2_t m_vb0;    // [m_b0  m_b0]
-#endif
-  float m_a0;
-  float m_a1;
-  float m_a2;
-  float m_b1;
-  float m_b2;
-  float m_b0;
+  FP m_a0;
+  std::vector<FP> m_a, m_b;
 };
 
 //------------------------------------------------------------------------------
 
 // Expresses a biquad as a pair of pole/zeros, with gain
 // values so that the coefficients can be reconstructed precisely.
-struct BiquadPoleState : PoleZeroPair
+template <typename FP>
+struct BiquadPoleState : PoleZeroPair<FP>
 {
   BiquadPoleState () { }
 
-  explicit BiquadPoleState (const BiquadBase& s);
+  explicit BiquadPoleState (const BiquadBase<FP>& s);
 
-  double gain;
+  FP gain;
 };
 
 // More permissive interface for fooling around
-class Biquad : public BiquadBase
+template <typename FP>
+class Biquad : public BiquadBase<FP>
 {
 public:
-  Biquad ();
+  Biquad () { setIdentity (); };
 
-  explicit Biquad (const BiquadPoleState& bps);
+  explicit Biquad (const BiquadPoleState<FP>& bps) { setPoleZeroForm (bps); };
 
 public:
   // Process a block of samples, interpolating from the old section's coefficients
@@ -171,22 +155,22 @@ public:
   void smoothProcess1 (int numSamples,
                        Sample* dest,
                        StateType& state,
-                       Biquad sectionPrev) const 
+                       Biquad<FP> sectionPrev) const 
   {
-    double t = 1. / numSamples;
-    double da1 = (m_a1 - sectionPrev.m_a1) * t;
-    double da2 = (m_a2 - sectionPrev.m_a2) * t;
-    double db0 = (m_b0 - sectionPrev.m_b0) * t;
-    double db1 = (m_b1 - sectionPrev.m_b1) * t;
-    double db2 = (m_b2 - sectionPrev.m_b2) * t;
+    FP t = 1. / numSamples;
+    FP da1 = (m_a[1] - sectionPrev.m_a[1]) * t;
+    FP da2 = (m_a[2] - sectionPrev.m_a[2]) * t;
+    FP db0 = (m_b[0] - sectionPrev.m_b[0]) * t;
+    FP db1 = (m_b[1] - sectionPrev.m_b[1]) * t;
+    FP db2 = (m_b[2] - sectionPrev.m_b[2]) * t;
 
     while (--numSamples >= 0)
     {
-      sectionPrev.m_a1 += da1;
-      sectionPrev.m_a2 += da2;
-      sectionPrev.m_b0 += db0;
-      sectionPrev.m_b1 += db1;
-      sectionPrev.m_b2 += db2;
+      sectionPrev.m_a[1] += da1;
+      sectionPrev.m_a[2] += da2;
+      sectionPrev.m_b[0] += db0;
+      sectionPrev.m_b[1] += db1;
+      sectionPrev.m_b[2] += db2;
 
       *dest = state.process (*dest, sectionPrev);
       dest++;
@@ -200,15 +184,15 @@ public:
   void smoothProcess2 (int numSamples,
                        Sample* dest,
                        StateType& state,
-                       BiquadPoleState zPrev) const 
+                       BiquadPoleState<FP> zPrev) const 
   {
-    BiquadPoleState z (*this);
-    double t = 1. / numSamples;
-    complex_t dp0 = (z.poles.first  - zPrev.poles.first) * t;
-    complex_t dp1 = (z.poles.second - zPrev.poles.second) * t;
-    complex_t dz0 = (z.zeros.first  - zPrev.zeros.first) * t;
-    complex_t dz1 = (z.zeros.second - zPrev.zeros.second) * t;
-    double dg = (z.gain - zPrev.gain) * t;
+    BiquadPoleState<FP> z (*this);
+    FP t = 1. / numSamples;
+    std::complex<FP> dp0 = (z.poles.first  - zPrev.poles.first) * t;
+    std::complex<FP> dp1 = (z.poles.second - zPrev.poles.second) * t;
+    std::complex<FP> dz0 = (z.zeros.first  - zPrev.zeros.first) * t;
+    std::complex<FP> dz1 = (z.zeros.second - zPrev.zeros.second) * t;
+    FP dg = (z.gain - zPrev.gain) * t;
 
     while (--numSamples >= 0)
     {
@@ -218,7 +202,7 @@ public:
       zPrev.zeros.second += dz1;
       zPrev.gain += dg;
 
-      *dest = state.process (*dest, Biquad (zPrev));
+      *dest = state.process (*dest, Biquad<FP> (zPrev));
       dest++;
     }
   }
@@ -226,25 +210,25 @@ public:
 public:
   // Export these as public
 
-  void setOnePole (complex_t pole, complex_t zero)
+  void setOnePole (const std::complex<FP>& pole, const std::complex<FP>& zero)
   {
-    BiquadBase::setOnePole (pole, zero);
+    BiquadBase<FP>::setOnePole (pole, zero);
   }
 
-  void setTwoPole (complex_t pole1, complex_t zero1,
-                   complex_t pole2, complex_t zero2)
+  void setTwoPole (const std::complex<FP>& pole1, const std::complex<FP>& zero1,
+                   const std::complex<FP>& pole2, const std::complex<FP>& zero2)
   {
-    BiquadBase::setTwoPole (pole1, zero1, pole2, zero2);
+    BiquadBase<FP>::setTwoPole (pole1, zero1, pole2, zero2);
   }
 
-  void setPoleZeroPair (const PoleZeroPair& pair)
+  void setPoleZeroPair (const PoleZeroPair<FP>& pair)
   {
-    BiquadBase::setPoleZeroPair (pair);
+    BiquadBase<FP>::setPoleZeroPair (pair);
   }
 
-  void applyScale (double scale)
+  void applyScale (const FP& scale)
   {
-    BiquadBase::applyScale (scale);
+    BiquadBase<FP>::applyScale (scale);
   }
 };
 

@@ -53,23 +53,23 @@ namespace Dsp {
 namespace Bessel {
 
 // A Workspace is necessary to find roots
-
+template <typename FP>
 struct WorkspaceBase
 {
-  WorkspaceBase (RootFinderBase* rootsBase)
+  WorkspaceBase (RootFinderBase<FP>* rootsBase)
     : roots (*rootsBase)
   {
   }
 
-  RootFinderBase& roots;
+  RootFinderBase<FP>& roots;
 
 private:
-  WorkspaceBase (WorkspaceBase&);
-  WorkspaceBase& operator= (WorkspaceBase&);
+  WorkspaceBase (WorkspaceBase<FP>&);
+  WorkspaceBase<FP>& operator= (WorkspaceBase<FP>&);
 };
 
-template <int MaxOrder>
-struct Workspace : WorkspaceBase
+template <int MaxOrder, typename FP>
+struct Workspace : WorkspaceBase<FP>
 {
   Workspace ()
     : WorkspaceBase (&m_roots)
@@ -77,32 +77,32 @@ struct Workspace : WorkspaceBase
   }
 
 private:
-  RootFinder <MaxOrder> m_roots;
+  RootFinder<MaxOrder, FP> m_roots;
 };
 
 //------------------------------------------------------------------------------
 
 // Half-band analog prototypes (s-plane)
-
+template<typename FP>
 class AnalogLowPass : public LayoutBase
 {
 public:
   AnalogLowPass ();
 
   void design (const int numPoles,
-               WorkspaceBase* w);
+               WorkspaceBase<FP>* w);
 };
 
 //------------------------------------------------------------------------------
-
+template <typename FP>
 class AnalogLowShelf : public LayoutBase
 {
 public:
   AnalogLowShelf ();
 
   void design (int numPoles,
-               double gainDb,
-               WorkspaceBase* w);
+               FP gainDb,
+               WorkspaceBase<FP>* w);
 
 private:
   double m_gainDb;
@@ -111,47 +111,51 @@ private:
 //------------------------------------------------------------------------------
 
 // Factored implementations to reduce template instantiations
-
-struct LowPassBase : AnalogPoleFilterBase <AnalogLowPass>
+template<typename FP>
+struct LowPassBase : AnalogPoleFilterBase <AnalogLowPass<FP>>
 {
   void setup (int order,
-              double sampleRate,
-              double cutoffFrequency,
+              FP sampleRate,
+              FP cutoffFrequency,
+              WorkspaceBase<FP>* w);
+};
+
+template<typename FP>
+struct HighPassBase : AnalogPoleFilterBase <AnalogLowPass<FP>>
+{
+  void setup (int order,
+              FP sampleRate,
+              FP cutoffFrequency,
+              WorkspaceBase<FP>* w);
+};
+
+template<typename FP>
+struct BandPassBase : AnalogPoleFilterBase <AnalogLowPass<FP>>
+{
+  void setup (int order,
+              FP sampleRate,
+              FP centerFrequency,
+              FP widthFrequency,
               WorkspaceBase* w);
 };
 
-struct HighPassBase : AnalogPoleFilterBase <AnalogLowPass>
+template<typename FP>
+struct BandStopBase : AnalogPoleFilterBase <AnalogLowPass<FP>>
 {
   void setup (int order,
-              double sampleRate,
-              double cutoffFrequency,
+              FP sampleRate,
+              FP centerFrequency,
+              FP widthFrequency,
               WorkspaceBase* w);
 };
 
-struct BandPassBase : AnalogPoleFilterBase <AnalogLowPass>
+template<typename FP>
+struct LowShelfBase : AnalogPoleFilterBase <AnalogLowShelf<FP>>
 {
   void setup (int order,
-              double sampleRate,
-              double centerFrequency,
-              double widthFrequency,
-              WorkspaceBase* w);
-};
-
-struct BandStopBase : AnalogPoleFilterBase <AnalogLowPass>
-{
-  void setup (int order,
-              double sampleRate,
-              double centerFrequency,
-              double widthFrequency,
-              WorkspaceBase* w);
-};
-
-struct LowShelfBase : AnalogPoleFilterBase <AnalogLowShelf>
-{
-  void setup (int order,
-              double sampleRate,
-              double cutoffFrequency,
-              double gainDb,
+              FP sampleRate,
+              FP cutoffFrequency,
+              FP gainDb,
               WorkspaceBase* w);
 };
 

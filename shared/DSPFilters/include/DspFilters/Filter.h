@@ -52,6 +52,7 @@ namespace Dsp {
  * parameters.
  *
  */
+template <typename FP>
 class Filter
 {
 public:
@@ -72,13 +73,13 @@ public:
     return m_params;
   }
 
-  double getParam (int paramIndex) const
+  FP getParam (int paramIndex) const
   {
     assert (paramIndex >= 0 && paramIndex <= getNumParams());
     return m_params[paramIndex];
   }
 
-  void setParam (int paramIndex, double nativeValue)
+  void setParam (int paramIndex, FP nativeValue)
   {
     assert (paramIndex >= 0 && paramIndex <= getNumParams());
     m_params[paramIndex] = nativeValue;
@@ -87,7 +88,7 @@ public:
 
   int findParamId (int paramId);
 
-  void setParamById (int paramId, double nativeValue);
+  void setParamById (int paramId, FP nativeValue);
 
   void setParams (const Params& parameters)
   {
@@ -98,16 +99,17 @@ public:
   // This makes a best-effort to pick up the values
   // of matching parameters from another set. It uses
   // the ParamID information to make the match.
-  void copyParamsFrom (Dsp::Filter const* other);
+  template <typename FP2>
+  void copyParamsFrom (Dsp::Filter<FP2> const* other);
 
-  virtual std::vector<PoleZeroPair> getPoleZeros() const = 0;
+  virtual std::vector<PoleZeroPair<FP>> getPoleZeros() const = 0;
  
-  virtual complex_t response (double normalizedFrequency) const = 0;
+  virtual std::complex<FP> response (FP normalizedFrequency) const = 0;
 
   virtual int getNumChannels() = 0;
   virtual void reset () = 0;
   virtual void process (int numSamples, float* const* arrayOfChannels) = 0;
-  virtual void process (int numSamples, double* const* arrayOfChannels) = 0;
+  virtual void process (int numSamples, FP* const* arrayOfChannels) = 0;
 
 protected:
   virtual void doSetParams (const Params& parameters) = 0;

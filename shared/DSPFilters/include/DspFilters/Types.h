@@ -42,23 +42,22 @@ THE SOFTWARE.
 namespace Dsp {
 
 // A conjugate or real pair
-struct ComplexPair : complex_pair_t
+template<typename FP>
+struct ComplexPair : complex_pair_t<FP>
 {
   ComplexPair ()
   {
   }
 
-  explicit ComplexPair (const complex_t& c1)
-    : complex_pair_t (c1, 0.)
+  explicit ComplexPair (const std::complex<FP>& c1)
+    : complex_pair_t<FP> (c1, 0.)
   {
     assert (isReal());
   }
 
-  ComplexPair (const complex_t& c1,
-               const complex_t& c2)
-    : complex_pair_t (c1, c2)
-  {
-  }
+  ComplexPair (const std::complex<FP>& c1,
+               const std::complex<FP>& c2)
+    : complex_pair_t<FP> (c1, c2) {}
 
   bool isConjugate () const
   {
@@ -82,29 +81,30 @@ struct ComplexPair : complex_pair_t
              first.real () != 0;
   }
 
-  bool is_nan () const
+  bool isnan () const
   {
-    return Dsp::is_nan (first) || Dsp::is_nan (second);
+    return Dsp::isnan (first) || Dsp::isnan (second);
   }
 };
 
 // A pair of pole/zeros. This fits in a biquad (but is missing the gain)
+template<typename FP>
 struct PoleZeroPair
 {
-  ComplexPair poles;
-  ComplexPair zeros;
+  ComplexPair<FP> poles;
+  ComplexPair<FP> zeros;
 
   PoleZeroPair () { }
 
   // single pole/zero
-  PoleZeroPair (const complex_t& p, const complex_t& z)
+  PoleZeroPair (const std::complex<FP>& p, const std::complex<FP>& z)
     : poles (p), zeros (z)
   {
   }
 
   // pole/zero pair
-  PoleZeroPair (const complex_t& p1, const complex_t& z1,
-                const complex_t& p2, const complex_t& z2)
+  PoleZeroPair (const std::complex<FP>& p1, const std::complex<FP>& z1,
+                const std::complex<FP>& p2, const std::complex<FP>& z2)
     : poles (p1, p2)
     , zeros (z1, z2)
   {
@@ -115,9 +115,9 @@ struct PoleZeroPair
     return poles.second == 0. && zeros.second == 0.;
   }
 
-  bool is_nan () const
+  bool isnan () const
   {
-    return poles.is_nan() || zeros.is_nan();
+    return poles.isnan() || zeros.isnan();
   }
 };
 

@@ -46,84 +46,55 @@ namespace Dsp {
 // complex-valued coefficients using a numerical method.
 //
 
-class RootFinderBase
-{
-public:
-  struct Array
-  {
-    Array (int /*max*/, complex_t* /*values*/)
-     // : m_max (max)
-     // , m_values (values)
-    {
-    }
-
-    //complex_t& operator[] (int index)
-    //{
-    //};
-  };
-
+template <typename FP>
+class RootFinderBase {
+ public:
   //
   // Find roots of polynomial f(x)=a[0]+a[1]*x+a[2]*x^2...+a[degree]*x^degree
   // The input coefficients are set using coef()[].
   // The solutions are placed in roots.
   //
-  void solve (int degree,
-              bool polish = true,
-              bool doSort = true);
+  void solve(const int &degree, const bool &polish = true,
+             const bool &doSort = true);
 
   // Evaluates the polynomial at x
-  complex_t eval (int degree,
-                  const complex_t& x);
+  std::complex<FP> eval(const int &degree, const std::complex<FP> &x);
 
   // Direct access to the input coefficient array of size degree+1.
-  complex_t* coef()
-  {
-    return m_a;
-  }
+  std::complex<FP> *coef() { return m_a; }
 
   // Direct access to the resulting roots array of size degree
-  complex_t* root()
-  {
-    return m_root;
-  }
+  complex_t *root() { return m_root; }
 
   // sort the roots by descending imaginary part
-  void sort (int degree);
+  void sort(const int &degree);
 
-private:
+ private:
   // Improves x as a root using Laguerre's method.
   // The input coefficient array has degree+1 elements.
-  void laguerre (int degree,
-                 complex_t a[],
-                 complex_t& x,
-                 int& its);
+  void laguerre(const int &degree, const std::vector<std::complex<FP>> &a,
+                std::complex<FP> &x, const int &its);
 
-protected:
+ protected:
   int m_maxdegree;
-  complex_t* m_a;		// input coefficients (m_maxdegree+1 elements)
-  complex_t* m_ad;	// copy of deflating coefficients
-  complex_t* m_root; // array of roots (maxdegree elements)
+  std::vector<std::complex<FP>>
+      m_a,     // input coefficients (m_maxdegree+1 elements)
+      m_ad,    // copy of deflating coefficients
+      m_root;  // array of roots (maxdegree elements)
 };
 
 //------------------------------------------------------------------------------
 
-template<int maxdegree>
-struct RootFinder : RootFinderBase
-{
-  RootFinder()
-  {
+template <int maxdegree, typename FP>
+struct RootFinder : RootFinderBase<FP> {
+  RootFinder() {
     m_maxdegree = maxdegree;
-    m_a  = m_a0;
-    m_ad = m_ad0;
-    m_root = m_r;
+    m_a.reserve(maxdegree + 1);
+    m_ad.reserve(maxdegree + 1);
+    m_root.reserve(maxdegree);
   }
-
-private:
-  complex_t m_a0 [maxdegree+1];
-  complex_t m_ad0[maxdegree+1];
-  complex_t m_r  [maxdegree];
 };
 
-}
+}  // namespace Dsp
 
 #endif
