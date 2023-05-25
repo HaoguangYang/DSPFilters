@@ -52,69 +52,102 @@ namespace Dsp {
  * parameters.
  *
  */
-template <typename FP>
-class Filter
-{
-public:
-  virtual ~Filter();
 
-  virtual Kind getKind () const = 0;
+class Filter {
+ public:
+  virtual ~Filter(){};
 
-  virtual const std::string getName () const = 0;
+  virtual Kind getKind() const = 0;
 
-  virtual int getNumParams () const = 0;  
+  virtual const std::string getName() const = 0;
 
-  virtual ParamInfo getParamInfo (int index) const = 0;
+  virtual int getNumParams() const = 0;
 
-  Params getDefaultParams() const;
+  virtual ParamInfo getParamInfo(int index) const = 0;
 
-  const Params& getParams() const
-  {
-    return m_params;
+  Params getDefaultParams() const {
+    Params params;
+    params.clear();
+    for (int i = 0; i < getNumParams(); ++i)
+      params[i] = getParamInfo(i).getDefaultValue();
+    return params;
   }
 
-  FP getParam (int paramIndex) const
-  {
-    assert (paramIndex >= 0 && paramIndex <= getNumParams());
+  const Params& getParams() const { return m_params; }
+
+  double getParam(int paramIndex) const {
+    assert(paramIndex >= 0 && paramIndex <= getNumParams());
     return m_params[paramIndex];
   }
 
-  void setParam (int paramIndex, FP nativeValue)
-  {
-    assert (paramIndex >= 0 && paramIndex <= getNumParams());
+  void setParam(int paramIndex, double nativeValue) {
+    assert(paramIndex >= 0 && paramIndex <= getNumParams());
     m_params[paramIndex] = nativeValue;
-    doSetParams (m_params);
+    doSetParams(m_params);
   }
 
-  int findParamId (int paramId);
+  int findParamId(int paramId) {
+    int index = -1;
+    for (int i = getNumParams(); --i >= 0;) {
+      if (getParamInfo(i).getId() == paramId) {
+        index = i;
+        break;
+      }
+    }
+    return index;
+  }
 
-  void setParamById (int paramId, FP nativeValue);
+  void setParamById(int paramId, double nativeValue) {
+    for (int i = getNumParams(); --i >= 0;) {
+      if (getParamInfo(i).getId() == paramId) {
+        setParam(i, nativeValue);
+        return;
+      }
+    }
+    assert(0);
+  }
 
-  void setParams (const Params& parameters)
-  {
+  void setParams(const Params& parameters) {
     m_params = parameters;
-    doSetParams (parameters);
+    doSetParams(parameters);
   }
 
   // This makes a best-effort to pick up the values
   // of matching parameters from another set. It uses
   // the ParamID information to make the match.
-  template <typename FP2>
-  void copyParamsFrom (Dsp::Filter<FP2> const* other);
+  void copyParamsFrom(Dsp::Filter const* other) {
+    // first, set reasonable defaults
+    m_params = getDefaultParams();
+    if (other) {
+      // now loop
+      for (int i = 0; i < getNumParams(); ++i) {
+        const ParamInfo& paramInfo = getParamInfo(i);
+        // find a match
+        for (int j = 0; j < other->getNumParams(); ++j) {
+          const ParamInfo& otherParamInfo = other->getParamInfo(j);
+          if (paramInfo.getId() == otherParamInfo.getId()) {
+            // match!
+            m_params[i] = paramInfo.clamp(other->getParam(j));
+            break;
+          }
+        }
+      }
+    }
 
-  virtual std::vector<PoleZeroPair<FP>> getPoleZeros() const = 0;
- 
-  virtual std::complex<FP> response (FP normalizedFrequency) const = 0;
+    doSetParams(m_params);
+  };
+
+  virtual std::complex<double> response(double normalizedFrequency) const = 0;
 
   virtual int getNumChannels() = 0;
-  virtual void reset () = 0;
-  virtual void process (int numSamples, float* const* arrayOfChannels) = 0;
-  virtual void process (int numSamples, FP* const* arrayOfChannels) = 0;
+  virtual void reset() = 0;
 
-protected:
-  virtual void doSetParams (const Params& parameters) = 0;
+  // virtual void process(int numSamples, double* const* arrayOfChannels) = 0;
 
-private:
+ protected:
+  virtual void doSetParams(const Params& parameters) = 0;
+
+ private:
   Params m_params;
 };
 
@@ -129,105 +162,100 @@ private:
  *
  */
 
+template <typename FP>
+struct DiscreteTransferFcn {
+  std::vector<FP> numerator;
+  std::vector<FP> denominator;
+};
+
 // Factored to reduce template instantiations
+// DesignClass must inherit from Layout.
 template <class DesignClass>
-class FilterDesignBase : public Filter
-{
-public:
-  Kind getKind () const
-  {
-    return m_design.getKind ();
-  }
+class FilterDesignBase : public Filter {
+ public:
+  Kind getKind() const { return m_design.getKind(); }
 
-  const std::string getName () const
-  {
-    return m_design.getName ();
-  }
+  const std::string getName() const { return m_design.getName(); }
 
-  int getNumParams () const
-  {
-    return DesignClass::NumParams;
-  }
+  int getNumParams() const { return DesignClass::NumParams; }
 
-  Params getDefaultParams() const
-  {
-    return m_design.getDefaultParams();
-  }
+  Params getDefaultParams() const { return m_design.getDefaultParams(); }
 
-  ParamInfo getParamInfo (int index) const
-  {
-    switch (index)
-    {
-    case 0: return m_design.getParamInfo_0 ();
-    case 1: return m_design.getParamInfo_1 ();
-    case 2: return m_design.getParamInfo_2 ();
-    case 3: return m_design.getParamInfo_3 ();
-    case 4: return m_design.getParamInfo_4 ();
-    case 5: return m_design.getParamInfo_5 ();
-    case 6: return m_design.getParamInfo_6 ();
-    case 7: return m_design.getParamInfo_7 ();
+  ParamInfo getParamInfo(int index) const {
+    switch (index) {
+      case 0:
+        return m_design.getParamInfo_0();
+      case 1:
+        return m_design.getParamInfo_1();
+      case 2:
+        return m_design.getParamInfo_2();
+      case 3:
+        return m_design.getParamInfo_3();
+      case 4:
+        return m_design.getParamInfo_4();
+      case 5:
+        return m_design.getParamInfo_5();
+      case 6:
+        return m_design.getParamInfo_6();
+      case 7:
+        return m_design.getParamInfo_7();
     };
 
     return ParamInfo();
   }
 
-  std::vector<PoleZeroPair> getPoleZeros() const
-  {
-    return m_design.getPoleZeros();
-  }
- 
-  complex_t response (double normalizedFrequency) const
-  {
-    return m_design.response (normalizedFrequency);
+  // This method gets the designed filter's digital poles and zeros (in Z
+  // plane), and cast its type from double to demanded type.
+  const PoleZero<double>& getPoleZeros(const bool& sPlane = false) const {
+    return m_design.getPoleZeros(sPlane);
   }
 
-protected:
-  void doSetParams (const Params& parameters)
-  {
-    m_design.setParams (parameters);
+  template <typename FP>
+  DiscreteTransferFcn<FP> getCoeffs() const {
+    DiscreteTransferFcn<FP> ret;
+    ret.numerator = m_design.getNumerator<FP>();
+    ret.denominator = m_design.getDenominator<FP>();
   }
 
-protected:
+  // FIXME: not implemented yet.
+  template <typename FP>
+  std::pair<DiscreteTransferFcn<FP>, bool> smoothGetCoeffs() {
+    DiscreteTransferFcn<FP> ret;
+    ret.numerator = m_design.getNumerator<FP>();
+    ret.denominator = m_design.getDenominator<FP>();
+    return std::make_pair(ret, false);
+  }
+
+  complex_t response(double normalizedFrequency) const {
+    return m_design.response(normalizedFrequency);
+  }
+
+ protected:
+  void doSetParams(const Params& parameters) { m_design.setParams(parameters); }
+
+ protected:
   DesignClass m_design;
 };
 
+// This class does barely anything now
+template <class DesignClass, int Channels = 0,
+          class StateType = DirectFormII<float>>
+class FilterDesign : public FilterDesignBase<DesignClass> {
+ public:
+  FilterDesign() {}
 
+  int getNumChannels() { return Channels; }
 
-template <class DesignClass,
-          int Channels = 0,
-          class StateType = DirectFormII<float> >
-class FilterDesign : public FilterDesignBase <DesignClass>
-{
-public:
-  FilterDesign ()
-  {
+  void reset() { m_state.reset(); }
+
+  void process(int numSamples, StateType::SignalType* const* arrayOfChannels) {
+    m_state.process(numSamples, arrayOfChannels,
+                    FilterDesignBase<DesignClass>::m_design);
   }
 
-  int getNumChannels()
-  {
-    return Channels;
-  }
-
-  void reset ()
-  {
-    m_state.reset();
-  }
-
-  void process (int numSamples, float* const* arrayOfChannels)
-  {
-    m_state.process (numSamples, arrayOfChannels,
-                     FilterDesignBase<DesignClass>::m_design);
-  }
-
-  void process (int numSamples, double* const* arrayOfChannels)
-  {
-    m_state.process (numSamples, arrayOfChannels,
-                     FilterDesignBase<DesignClass>::m_design);
-  }
-
-protected:
-  ChannelsState <Channels,
-                 typename DesignClass::template State <StateType> > m_state;
+ protected:
+  ChannelsState<Channels, typename DesignClass::template State<StateType>>
+      m_state;
 };
 
 //------------------------------------------------------------------------------
@@ -239,40 +267,145 @@ protected:
  * not supported, but this class has a smaller footprint.
  *
  */
-template <class FilterClass,
-          int Channels = 0,
-          class StateType = DirectFormII<float> >
-class SimpleFilter : public FilterClass
-{
-public:
-  int getNumChannels()
-  {
-    return Channels;
+
+template <class FilterDesignClass, class StateType = DirectFormI<float>,
+          size_t Channels = 0>
+class FilterImpl {
+ public:
+  typedef StateType::SignalType SignalType;
+
+  FilterImpl() {}
+
+  template <typename... ArgsT>
+  FilterImpl(ArgsT... params) {
+    rawFilterInitImpl_({params...});
   }
 
-  void reset ()
-  {
-    m_state.reset();
+  void setParam(const size_t& channelIndex, const size_t& paramIndex,
+                const double& nativeValue) {
+    if (paramIndex >= FilterDesignClass::getNumParams())
+      throw std::runtime_error(
+          "parameter index for raw filter exceeds RawFilter's parameters");
+    rawFilters_[channelIndex].setParam(paramIndex, nativeValue);
   }
 
-  template <typename Sample>
-  void process (int numSamples, Sample* const* arrayOfChannels)
-  {
-    m_state.process (numSamples, arrayOfChannels, *((FilterClass*)this));
+  void setParam(const size_t& channelIndex,
+                const std::initializer_list<double>& params) {
+    rawFilters_[channelIndex].setParam(params);
   }
 
-  template<typename It, typename... Iterators>
-  typename std::enable_if<!std::is_integral<It>::value>::type
-    process (It it, Iterators... its)
-  {
-    m_state.process (*((FilterClass*)this), it, its...);
+  size_t getNumChannels() { return Channels; }
+
+  void reset() {
+    for (auto& i : state_) i.reset();
   }
 
-protected:
-  ChannelsState <Channels,
-                 typename FilterClass::template State <StateType> > m_state;
+  void resetChannel(size_t index) { state_[index].reset(); }
+
+  void process(int numSamples, SignalType* const* arrayOfChannels) {
+    // in-place processing of the input signal
+    for (size_t n = 0; n < Channels; n++)
+      state_[n].process(numSamples, arrayOfChannels[n], dtfs_[n]);
+  }
+
+  void smoothProcess(int numSamples, SignalType* const* arrayOfChannels) {
+    // in-place processing of the input signal
+    for (size_t n = 0; n < Channels; n++) {
+      if (needsSmoothing_[n]) {
+        for (int j = 0; j < numSamples; j++) {
+          // Break up the input array to individual samples and process.
+          // FIXME: implement this API in FilterDesign class
+          auto res = rawFilters_[n].smoothGetCoeffs<SignalType>();
+          dtfs_[n] = res.first;
+          needsSmoothing_[n] = res.second;
+          // TODO: perform a dtfs pre-update and post-update process to obtain
+          // the smoothing delta, and add exponential decay to the smoothing
+          // delta.
+          state_[n].process(1, arrayOfChannels[n][j], dtfs_[n]);
+        }
+      } else {
+        state_[n].process(numSamples, arrayOfChannels[n], dtfs_[n]);
+        // TODO: add exponential decay to smoothing delta
+      }
+    }
+  }
+
+ protected:
+  void rawFilterInitImpl_(const std::initializer_list<double>& params) {
+    if (params.size() != Channels * FilterDesignClass::getNumParams()) {
+      if (param.size() != FilterDesignClass::getNumParams())
+        throw std::runtime_error(
+            "Filter initialization parameters are not aligned! Expected %d or "
+            "%d params, got %d.",
+            FilterDesignClass::getNumParams(),
+            Channels * FilterDesignClass::getNumParams(), params.size());
+      else {
+        // Initialize all filters to have the same parameters.
+        for (size_t n = 0; n < Channels; n++)
+          rawFilters_[n] = FilterDesignClass(params);
+      }
+    } else {
+      for (size_t n = 0; n < Channels; n++) {
+        rawFilters_[n] = FilterDesignClass(
+            {params.begin() + n * FilterDesignClass::getNumParams(),
+             (params.begin() + 1) + n * FilterDesignClass::getNumParams()});
+      }
+    }
+
+    for (size_t n = 0; n < Channels; n++) {
+      dtfs_[n] = rawFilters_[n].getCoeffs<SignalType>();
+    }
+  }
+
+  std::array<StateType, Channels> state_;
+  std::array<DiscreteTransferFcn<SignalType>, Channels> dtfs_;
+  std::array<bool, Channels> needsSmoothing_{false};
+  std::array<SignalType, Chanels> smoothDelta_{SignalType(0.)};
+  std::array<FilterDesignClass, Channels> rawFilters_;
 };
 
-}
+// Filter class for analysis only
+template <class FilterDesignClass, class StateType>
+class FilterImpl<FilterDesignClass, StateType, 0> {
+ public:
+  typedef StateType::SignalType SignalType;
+
+  FilterImpl() {}
+
+  template <typename... ArgsT>
+  FilterImpl(ArgsT... params) {
+    rawFilter_ = FilterDesignClass({params...});
+    dtf_ = rawFilter_.getCoeffs<SignalType>()
+  }
+
+  size_t getNumChannels() { return 0; }
+
+  void reset() {
+    throw std::logic_error("attempt to reset empty ChannelState");
+  }
+
+  void resetChannel(size_t index) {
+    (void)index;
+    throw std::logic_error("attempt to reset empty ChannelState");
+  }
+
+  void process(int numSamples, SignalType* const* arrayOfChannels) {
+    (void)numSamples;
+    (void)arrayOfChannels;
+    throw std::logic_error("attempt to process empty ChannelState");
+  }
+
+  void smoothProcess(int numSamples, SignalType* const* arrayOfChannels) {
+    (void)numSamples;
+    (void)arrayOfChannels;
+    throw std::logic_error("attempt to process empty ChannelState");
+  }
+
+ protected:
+  DiscreteTransferFcn<SignalType> dtf_;
+  FilterDesignClass rawFilter_;
+};
+
+}  // namespace Dsp
 
 #endif

@@ -148,7 +148,7 @@ private:
 
 // Half-band analog prototypes (s-plane)
 
-class AnalogLowPass : public LayoutBase
+class AnalogLowPass : public Layout
 {
 public:
   AnalogLowPass ();

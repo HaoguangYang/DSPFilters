@@ -175,7 +175,7 @@ void BandShelf::setup (double sampleRate,
   double cs = std::cos(w0);
   double sn = std::sin(w0);
   double AL = sn * std::sinh( doubleLn2/2 * bandWidth * w0/sn );
-  assert (!Dsp::is_nan (AL));
+  assert (!Dsp::isnan (AL));
   assert (!std::isinf (AL));
   double b0 =  1 + AL * A;
   double b1 = -2 * cs;

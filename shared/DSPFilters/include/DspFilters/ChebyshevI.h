@@ -53,7 +53,7 @@ namespace ChebyshevI {
 
 // Half-band analog prototypes (s-plane)
 
-class AnalogLowPass : public LayoutBase
+class AnalogLowPass : public Layout
 {
 public:
   AnalogLowPass ();
@@ -67,7 +67,7 @@ private:
 
 //------------------------------------------------------------------------------
 
-class AnalogLowShelf : public LayoutBase
+class AnalogLowShelf : public Layout
 {
 public:
   AnalogLowShelf ();

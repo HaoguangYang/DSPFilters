@@ -74,7 +74,7 @@ struct DigitalRASTADescription
     static const char* getName() { return "Digital RASTA"; }
 };
 
-class DigitalRASTA : public LayoutBase
+class DigitalRASTA : public Layout
 {
 public:
   DigitalRASTA ();

@@ -36,9 +36,9 @@ THE SOFTWARE.
 #ifndef DSPFILTERS_POLEFILTER_H
 #define DSPFILTERS_POLEFILTER_H
 
+#include "DspFilters/Cascade.h"
 #include "DspFilters/Common.h"
 #include "DspFilters/MathSupplement.h"
-#include "DspFilters/Cascade.h"
 
 namespace Dsp {
 
@@ -54,10 +54,9 @@ namespace Dsp {
 
 // Factored implementations to reduce template instantiations
 
-template <class DigitalPrototype = LayoutBase>
-class DigitalPoleFilterBase : public Cascade
-{
-public:
+// Not sure we need this anymore.
+class DigitalPoleFilterBase : public Cascade {
+ public:
   // This gets the poles/zeros directly from the digital
   // prototype. It is used to double check the correctness
   // of the recovery of pole/zeros from biquad coefficients.
@@ -70,57 +69,46 @@ public:
   // Commenting this out will pass the call to the Cascade,
   // which tries to compute the poles and zeros from the biquad
   // coefficients.
-  std::vector<PoleZeroPair> getPoleZeros () const
-  {
-    std::vector<PoleZeroPair> vpz;
-    const int pairs = (m_digitalProto.getNumPoles () + 1) / 2;
-    for (int i = 0; i < pairs; ++i)
-      vpz.push_back (m_digitalProto[i]);
-    return vpz;
+  const PoleZero<double>& getPoleZeros() const {
+    return static_cast<PoleZero<double>>(m_digitalProto);
   }
 #endif
 
-protected:
-  DigitalPrototype m_digitalProto;
+ protected:
+  Layout m_digitalProto;
 };
 
 // Serves a container to hold the analog prototype
 // and the digital pole/zero layout.
 template <class AnalogPrototype>
-class AnalogPoleFilterBase : public DigitalPoleFilterBase<>
-{
-protected:
-  void setPrototypeStorage (const LayoutBase& analogStorage,
-                            const LayoutBase& digitalStorage)
-  {
-    m_analogProto.setStorage (analogStorage);
-    m_digitalProto = digitalStorage;
+class AnalogPoleFilterBase : public DigitalPoleFilterBase {
+ protected:
+  void setPrototypeStorage(const LayoutBase<double>& analogStorage,
+                           const LayoutBase<double>& digitalStorage) {
+    m_analogProto.reserve(analogStorage);
+    this->m_digitalProto = digitalStorage;
   }
 
-protected:
+ protected:
   AnalogPrototype m_analogProto;
 };
 
 //------------------------------------------------------------------------------
 
 // Storage for pole filters
-template <class BaseClass,
-          int MaxAnalogPoles,
+template <class BaseClass, int MaxAnalogPoles,
           int MaxDigitalPoles = MaxAnalogPoles>
-struct PoleFilter : BaseClass
-                  , CascadeStages <(MaxDigitalPoles + 1) / 2>
-{
-  PoleFilter ()
-  {
+struct PoleFilter : BaseClass, CascadeStages<(MaxDigitalPoles + 1) / 2> {
+  PoleFilter() {
     // This glues together the factored base classes
     // with the templatized storage classes.
-    BaseClass::setCascadeStorage (this->getCascadeStorage());
-    BaseClass::setPrototypeStorage (m_analogStorage, m_digitalStorage);
+    BaseClass::setCascadeStorage(this->getCascadeStorage());
+    BaseClass::setPrototypeStorage(m_analogStorage, m_digitalStorage);
   }
 
-private:
-  Layout <MaxAnalogPoles> m_analogStorage;
-  Layout <MaxDigitalPoles> m_digitalStorage;
+ private:
+  Layout m_analogStorage;
+  Layout m_digitalStorage;
 };
 
 //------------------------------------------------------------------------------
@@ -136,83 +124,237 @@ private:
  *
  */
 
-// low pass to low pass 
-class LowPassTransform
-{
-public:
-  LowPassTransform (double fc,
-                    LayoutBase& digital,
-                    LayoutBase const& analog);
+class C2DTransformBase {
+ public:
+  // transforming a layout
+  void c2d(const Layout& analog, Layout& digital) {
+    for (const auto& pole : analog.poles()) {
+      auto transformedPole = transform(pole.first);
+      if (pole.order() == 1)
+        digital.append(transformedPole, false);
+      else if (pole.order() == 2){
+        if (pole.isReal()){
+          digital.append(transformedPole, false);
+          transformedPole = transform(pole.second);
+          digital.append(transformedPole, false);
+        } else {
+          digital.appendConjugatePairs(transformedPole, false);
+        }
+      }
+    }
+    for (const auto& zero : analog.zeros()) {
+      auto transformedZero = transform(zero.first);
+      if (zero.order() == 1)
+        digital.append(transformedZero, true);
+      else if (zero.order() == 2){
+        if (zero.isReal()){
+          digital.append(transformedZero, true);
+          transformedZero = transform(zero.second);
+          digital.append(transformedZero, true);
+        } else {
+          digital.appendConjugatePairs(transformedZero, true);
+        }
+      }
+    }
+  }
 
-private:
-  complex_t transform (complex_t c);
+ protected:
+  // transforming a single pole or zero
+  virtual std::vector<std::complex<double>> transform(const std::complex<double>& x) = 0;
+};
 
+// low pass to low pass
+class LowPassTransform : public C2DTransformBase {
+ public:
+  LowPassTransform(double fc, Layout& digital, const Layout& analog) {
+    digital.clear();
+    // prewarp
+    f = std::tan(doublePi * fc);
+    c2d(analog, digital);
+    digital.setNormal(analog.getNormalW(), analog.getNormalGain());
+  }
+
+ protected:
+  std::vector<std::complex<double>> transform(const std::complex<double>& c) override {
+    std::vector<std::complex<double>> ret{};
+    if (c == infinity<double>()){
+      ret.emplace_back(-1., 0.);
+      return ret;
+    }
+    // frequency transform
+    auto c1 = f * c;
+    // bilinear low pass transform
+    ret.emplace_back((1. + c1) / (1. - c1));
+    return ret;
+  }
+
+ private:
   double f;
 };
 
 //------------------------------------------------------------------------------
 
 // low pass to high pass
-class HighPassTransform
-{
-public:
-  HighPassTransform (double fc,
-                     LayoutBase& digital,
-                     LayoutBase const& analog);
+class HighPassTransform : public C2DTransformBase {
+ public:
+  HighPassTransform(double fc, Layout& digital, const Layout& analog) {
+    digital.clear();
+    // prewarp
+    f = 1. / std::tan(doublePi * fc);
+    c2d(analog, digital);
+    digital.setNormal(doublePi - analog.getNormalW(), analog.getNormalGain());
+  }
 
-private:
-  complex_t transform (complex_t c);
+ protected:
+  std::vector<std::complex<double>> transform(const std::complex<double>& c) override {
+    std::vector<std::complex<double>> ret{};
+    if (c == infinity<double>()){
+      ret.emplace_back(1., 0.);
+      return ret;
+    }
+    // frequency transform
+    auto c1 = f * c;
+    // bilinear high pass transform
+    ret.emplace_back(-(1. + c1) / (1. - c1));
+    return ret;
+  }
 
+ private:
   double f;
 };
 
 //------------------------------------------------------------------------------
 
 // low pass to band pass transform
-class BandPassTransform
-{
+class BandPassTransform : DenormalPrevention<double>, public C2DTransformBase {
+ public:
+  BandPassTransform(double fc, double fw, Layout& digital,
+                    const Layout& analog) {
+    // handle degenerate cases efficiently
+    // THIS DOESNT WORK because the cascade states won't match
+#if 0
+    const double fw_2 = fw / 2;
+    if (fc - fw_2 < 0) {
+      LowPassTransform::LowPassTransform (fc + fw_2, digital, analog);
+    } else if (fc + fw_2 >= 0.5) {
+      HighPassTransform::HighPassTransform (fc - fw_2, digital, analog);
+    } else
+#endif
+    digital.clear();
+    const double ww = 2 * doublePi * fw;
+    // pre-calcs
+    wc2 = 2 * doublePi * fc - (ww / 2);
+    wc = wc2 + ww;
 
-public:
-  BandPassTransform (double fc,
-                     double fw,
-                     LayoutBase& digital,
-                     LayoutBase const& analog);
+    // what is this crap?
+    wc2 = std::clamp(wc2, dc(), doublePi - dc());
 
-private:
-  ComplexPair transform (complex_t c);
+    a = std::cos((wc + wc2) * 0.5) / std::cos((wc - wc2) * 0.5);
+    b = 1. / std::tan((wc - wc2) * 0.5);
+    a2 = a * a;
+    b2 = b * b;
+    ab = a * b;
+    ab_2 = 2 * ab;
 
-  double wc;
-  double wc2;
-  double a;
-  double b;
-  double a2;
-  double b2;
-  double ab;
-  double ab_2;
+    c2d(analog, digital);
+
+    double wn = analog.getNormalW();
+    digital.setNormal(
+        2 * std::atan(std::sqrt(std::tan((wc + wn) * 0.5) * std::tan((wc2 + wn) * 0.5))),
+        analog.getNormalGain());
+  }
+
+ protected:
+  std::vector<std::complex<double>> transform(const std::complex<double>& c) override {
+    if (c == infinity<double>()) return std::vector<std::complex<double>>{-1., 1.};
+
+    auto c1 = (1. + c) / (1. - c);  // bilinear
+
+    std::complex<double> v = 0;
+    v = addmul(v, 4 * (b2 * (a2 - 1) + 1), c1);
+    v += 8 * (b2 * (a2 - 1) - 1);
+    v *= c1;
+    v += 4 * (b2 * (a2 - 1) + 1);
+    v = std::sqrt(v);
+
+    std::complex<double> u = -v;
+    u = addmul(u, ab_2, c1);
+    u += ab_2;
+
+    v = addmul(v, ab_2, c1);
+    v += ab_2;
+
+    std::complex<double> d = 0;
+    d = addmul(d, 2 * (b - 1), c1) + 2 * (1 + b);
+
+    return std::vector<std::complex<double>>{u / d, v / d};
+  }
+
+ private:
+  double wc, wc2, a, b, a2, b2, ab, ab_2;
 };
 
 //------------------------------------------------------------------------------
 
 // low pass to band stop transform
-class BandStopTransform
-{
-public:
-  BandStopTransform (double fc,
-                     double fw,
-                     LayoutBase& digital,
-                     LayoutBase const& analog);
+class BandStopTransform : DenormalPrevention<double>, public C2DTransformBase {
+ public:
+  BandStopTransform(double fc, double fw, Layout& digital,
+                    const Layout& analog) {
+    digital.clear();
 
-private:
-  ComplexPair transform (complex_t c);
+    const double ww = 2 * doublePi * fw;
 
-  double wc;
-  double wc2;
-  double a;
-  double b;
-  double a2;
-  double b2;
+    wc2 = 2 * doublePi * fc - (ww / 2);
+    wc = wc2 + ww;
+
+    // this is crap
+    if (wc2 < dc()) wc2 = dc();
+    if (wc > doublePi - dc()) wc = doublePi - dc();
+
+    a = std::cos((wc + wc2) * .5) / std::cos((wc - wc2) * .5);
+    b = std::tan((wc - wc2) * .5);
+    a2 = a * a;
+    b2 = b * b;
+
+    c2d(analog, digital);
+
+    if (fc < 0.25)
+      digital.setNormal(doublePi, analog.getNormalGain());
+    else
+      digital.setNormal(0, analog.getNormalGain());
+  }
+
+ private:
+  std::vector<std::complex<double>> transform(const std::complex<double>& c) override {
+    std::complex<double> c1 = -1.;
+    if (c != infinity<double>())
+      c1 = (1. + c) / (1. - c);  // bilinear
+
+    std::complex<double> u(0);
+    u = addmul(u, 4 * (b2 + a2 - 1), c);
+    u += 8 * (b2 - a2 + 1);
+    u *= c;
+    u += 4 * (a2 + b2 - 1);
+    u = std::sqrt(u);
+
+    std::complex<double> v = u * -.5;
+    v += a;
+    v = addmul(v, -a, c);
+
+    u *= .5;
+    u += a;
+    u = addmul(u, -a, c);
+
+    std::complex<double> d(b + 1);
+    d = addmul(d, b - 1, c);
+
+    return std::vector<std::complex<double>>{u / d, v / d};
+  }
+
+  double wc, wc2, a, b, a2, b2;
 };
 
-}
+}  // namespace Dsp
 
 #endif

@@ -36,24 +36,10 @@ THE SOFTWARE.
 #ifndef DSPFILTERS_CASCADE_H
 #define DSPFILTERS_CASCADE_H
 
-#ifdef __SSE3__
-#include <pmmintrin.h>
-#if (__GNUC__ == 4 && __GNUC_MINOR__ < 8)
-#ifndef __m128_buggy_gxx_up_to_4_7_type
-#define __m128_buggy_gxx_up_to_4_7_type
-union __m128_buggy_gxx_up_to_4_7 {
-    __m128 v;
-    float e[4];
-};
-#endif
-#endif
-#elif defined(__ARM_NEON__)
-#include <arm_neon.h>
-#endif
-
 #include <type_traits>
-#include "DspFilters/Common.h"
+
 #include "DspFilters/Biquad.h"
+#include "DspFilters/Common.h"
 #include "DspFilters/Filter.h"
 #include "DspFilters/Layout.h"
 #include "DspFilters/MathSupplement.h"
@@ -66,143 +52,133 @@ namespace Dsp {
  */
 
 // Factored implementation to reduce template instantiations
-class Cascade
-{
-public:
-  template <class StateType, bool Simd = StateType::HasSimd>
-  class StateBase : private DenormalPrevention
-  {
-  public:
+class Cascade {
+ public:
+  template <class StateType>
+  class StateBase : private DenormalPrevention<FP> {
+   public:
     template <typename Sample>
-    inline typename std::enable_if<Simd, Sample>::type
-    process (const Sample in, const Cascade& c)
-    {
+    inline Sample process(
+        const Sample& in, const Cascade& c) {
       StateType* state = m_stateArray;
       const Biquad* stage = c.m_stageArray;
-#ifdef __SSE3__
-      const __m128 vsa = _mm_set1_ps(ac());
-      __m128 out = _mm_set1_ps(in);
-      out = (state++)->process1Simd (out, *stage++, vsa);
-#elif defined(__ARM_NEON__)
-      const float32x2_t vsa = vdup_n_f32(ac());
-      float32x2_t out = vdup_n_f32(in);
-      out = (state++)->process1Simd (out, *stage++, vsa);
-#else
-      const typename StateType::FPType vsa = ac();
-      typename StateType::FPType out = in;
-      out = (state++)->process1 (out, *stage++, vsa);
-#endif
+      const typename StateType::SignalType vsa = ac();
+      typename StateType::SignalType out = in;
+      out = (state++)->process1(out, *stage++, vsa);
       for (int i = 0; i < c.m_numStages - 1; i++) {
-#ifdef __SSE3__
-        out = (state++)->process1Simd (out, *stage++, _mm_setzero_ps());
-#elif defined(__ARM_NEON__)
-        out = (state++)->process1Simd (out, *stage++, vdup_n_f32(0));
-#else
-        out = (state++)->process1 (out, *stage++, typename StateType::FPType());
-#endif
+        out = (state++)->process1(out, *stage++, typename StateType::SignalType());
       }
-#ifdef __SSE3__
-#if (__GNUC__ == 4 && __GNUC_MINOR__ < 8)
-      __m128_buggy_gxx_up_to_4_7 out_e;
-      out_e.v = out;
-      return out_e.e[0];
-#else
-      return static_cast<Sample> (out[0]);
-#endif
-#elif defined(__ARM_NEON__)
-      return static_cast<Sample> (vget_lane_f32(out, 0));
-#else
-      return static_cast<Sample> (out);
-#endif
+      return static_cast<Sample>(out);
     }
 
-    template <typename Sample>
-    inline typename std::enable_if<!Simd, Sample>::type
-    process (const Sample in, const Cascade& c)
-    {
-      StateType* state = m_stateArray;
-      const Biquad* stage = c.m_stageArray;
-      const typename StateType::FPType vsa = ac();
-      typename StateType::FPType out = in;
-      out = (state++)->process1 (out, *stage++, vsa);
-      for (int i = 0; i < c.m_numStages - 1; i++) {
-        out = (state++)->process1 (out, *stage++, typename StateType::FPType());
-      }
-      return static_cast<Sample> (out);
-    }
+   protected:
+    StateBase(StateType* stateArray) : m_stateArray(stateArray) {}
 
-  protected:
-    StateBase (StateType* stateArray)
-      : m_stateArray (stateArray)
-    {
-    }
-
-  protected:
+   protected:
     StateType* m_stateArray;
   };
 
-  struct Stage : Biquad
-  {
-  };
+  struct Stage : Biquad {};
 
-  struct Storage
-  {
-    Storage (int maxStages_, Stage* stageArray_)
-      : maxStages (maxStages_)
-      , stageArray (stageArray_)
-    {
-    }
+  struct Storage {
+    Storage(int maxStages_, Stage* stageArray_)
+        : maxStages(maxStages_), stageArray(stageArray_) {}
 
     int maxStages;
     Stage* stageArray;
   };
 
-  int getNumStages () const
-  {
-    return m_numStages;
-  }
+  int getNumStages() const { return m_numStages; }
 
-  const Stage& operator[] (int index)
-  {
-    assert (index >= 0 && index <= m_numStages);
+  const Stage& operator[](int index) {
+    assert(index >= 0 && index <= m_numStages);
     return m_stageArray[index];
   }
 
-public:
+ public:
   virtual ~Cascade() {}
 
   // Calculate filter response at the given normalized frequency.
-  complex_t response (double normalizedFrequency) const;
+  complex_t<double> response(double normalizedFrequency) const {
+    double w = 2 * doublePi * normalizedFrequency;
+    const complex_t<double> czn1 = std::polar(1., -w);
+    const complex_t<double> czn2 = std::polar(1., -2 * w);
+    complex_t<double> ch(1);
+    complex_t<double> cbot(1);
 
-  std::vector<PoleZeroPair> getPoleZeros () const;
+    const Biquad* stage = m_stageArray;
+    for (int i = m_numStages; --i >= 0; ++stage) {
+      complex_t<double> cb(1);
+      complex_t<double> ct(stage->getB0() / stage->getA0());
+      ct = addmul(ct, stage->getB1() / stage->getA0(), czn1);
+      ct = addmul(ct, stage->getB2() / stage->getA0(), czn2);
+      cb = addmul(cb, stage->getA1() / stage->getA0(), czn1);
+      cb = addmul(cb, stage->getA2() / stage->getA0(), czn2);
+      ch *= ct;
+      cbot *= cb;
+    }
+
+    return ch / cbot;
+  }
+
+  std::vector<PoleZero<double>> getPoleZeros() const {
+    std::vector<PoleZero<double>> vpz;
+    vpz.reserve(m_numStages);
+
+    const Stage* stage = m_stageArray;
+    for (int i = m_numStages; --i >= 0;) {
+      BiquadPoleState<double> bps(*stage++);
+      assert(!bps.isSinglePole() || i == 0);
+      vpz.push_back(bps);
+    }
+
+    return vpz;
+  }
 
   // Process a block of samples in the given form
   template <class StateType, typename Sample>
-  void process (int numSamples, Sample* dest, StateType& state) const
-  {
+  void process(int numSamples, Sample* dest, StateType& state) const {
     while (--numSamples >= 0) {
-      *dest = state.process (*dest, *this);
+      *dest = state.process(*dest, *this);
       dest++;
     }
   }
 
   template <class StateType, typename It>
-  void process (It first, It last, StateType& state) const
-  {
+  void process(It first, It last, StateType& state) const {
     for (; first != last; ++first) {
-      *first = state.process (*first, *this);
+      *first = state.process(*first, *this);
     }
   }
 
-protected:
-  Cascade ();
+ protected:
+  Cascade() : m_numStages(0), m_maxStages(0), m_stageArray(0){};
 
-  void setCascadeStorage (const Storage& storage);
+  void setCascadeStorage(const Storage& storage) {
+    m_numStages = 0;
+    m_maxStages = storage.maxStages;
+    m_stageArray = storage.stageArray;
+  }
 
-  virtual void applyScale (double scale);
-  void setLayout (const LayoutBase& proto);
+  virtual void applyScale(double scale) {
+    // For higher order filters it might be helpful
+    // to spread this factor between all the stages.
+    assert(m_numStages > 0);
+    m_stageArray->applyScale(scale);
+  }
 
-private:
+  void setLayout(const Layout& proto) {
+    const int numPoles = proto.getNumPoles();
+
+    Biquad* stage = m_stageArray;
+    for (int i = 0; i < m_numStages; ++i, ++stage)
+      stage->setPoleZero(proto[i]);
+
+    applyScale(proto.getNormalGain() /
+               std::abs(response(proto.getNormalW() / (2 * doublePi))));
+  }
+
+ private:
   int m_numStages;
   int m_maxStages;
   Stage* m_stageArray;
@@ -211,41 +187,35 @@ private:
 //------------------------------------------------------------------------------
 
 // Storage for Cascade
-template <int MaxStages>
-class CascadeStages
-{
-public:
+template <int MaxStages, typename FP>
+class CascadeStages {
+ public:
   template <class StateType>
-  class State : public Cascade::StateBase <StateType>
-  {
-  public:
-    State() : Cascade::StateBase <StateType> (m_states)
-    {
-      Cascade::StateBase <StateType>::m_stateArray = m_states;
-      reset ();
+  class State : public Cascade<FP>::StateBase<StateType> {
+   public:
+    State() : Cascade<FP>::StateBase<StateType>(m_states) {
+      Cascade<FP>::StateBase<StateType>::m_stateArray = m_states;
+      reset();
     }
 
-    void reset ()
-    {
+    void reset() {
       StateType* state = m_states;
-      for (int i = MaxStages; --i >= 0; ++state)
-        state->reset();
+      for (int i = MaxStages; --i >= 0; ++state) state->reset();
     }
 
-  private:
+   private:
     StateType m_states[MaxStages];
   };
 
   /*@Internal*/
-  Cascade::Storage getCascadeStorage()
-  {
-    return Cascade::Storage (MaxStages, m_stages);
+  Cascade<FP>::Storage getCascadeStorage() {
+    return Cascade<FP>::Storage(MaxStages, m_stages);
   }
 
-private:
-  Cascade::Stage m_stages[MaxStages];
+ private:
+  Cascade<FP>::Stage m_stages[MaxStages];
 };
 
-}
+}  // namespace Dsp
 
 #endif

@@ -89,7 +89,7 @@ void PoleZeroChart::paintContents (Graphics& g)
 
   for (size_t i = 0; i < m_vpz.size(); ++i)
   {
-    const Dsp::PoleZeroPair& pzp = m_vpz[i];
+    const Dsp::PoleZero& pzp = m_vpz[i];
 
     if (!pzp.is_nan())
     {
@@ -149,11 +149,11 @@ void PoleZeroChart::update ()
   repaint ();
 }
 
-void PoleZeroChart::addPoleZeros (const std::vector<Dsp::PoleZeroPair>& vpz)
+void PoleZeroChart::addPoleZeros (const std::vector<Dsp::PoleZero>& vpz)
 {
   for (size_t i = 0; i < vpz.size(); ++i)
   {
-    const Dsp::PoleZeroPair& pzp = vpz[i];
+    const Dsp::PoleZero& pzp = vpz[i];
     m_vpz.push_back (pzp);
 
     m_max = jmax (m_max, fabs(pzp.poles.first.real()));

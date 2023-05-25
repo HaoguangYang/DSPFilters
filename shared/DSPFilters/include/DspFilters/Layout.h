@@ -36,6 +36,8 @@ THE SOFTWARE.
 #ifndef DSPFILTERS_LAYOUT_H
 #define DSPFILTERS_LAYOUT_H
 
+#include <type_traits>
+
 #include "DspFilters/Common.h"
 #include "DspFilters/MathSupplement.h"
 
@@ -48,126 +50,84 @@ namespace Dsp {
 //
 
 // Base uses pointers to reduce template instantiations
-template <typename FP>
-class LayoutBase
-{
-public:
-  LayoutBase ()
-    : m_numPoles (0)
-    , m_maxPoles (0)
-  {
+class Layout : public PoleZero<double>{
+ public:
+  // setter and getter for normalization gain and frequency
+  void setNormal(const double& w, const double& g) {
+    normalW_ = w;
+    normalGain_ = g;
   }
 
-  LayoutBase (int maxPoles, PoleZeroPair<FP>* pairs)
-    : m_numPoles (0)
-    , m_maxPoles (maxPoles)
-    , m_pair (pairs)
-  {
+  template <typename FP = double>
+  FP getNormalW() const {
+    return FP(normalW_);
   }
 
-  template <typename FP2>
-  void setStorage (const LayoutBase<FP2>& other)
-  {
-    m_numPoles = 0;
-    m_maxPoles = other.m_maxPoles;
-    m_pair = other.m_pair;
+  template <typename FP = double>
+  FP getNormalGain() const {
+    return FP(normalGain_);
   }
 
-  void reset ()
-  {
-    m_numPoles = 0;
+  template <typename FP>
+  std::vector<FP> getDenominator() const {
+    return Layout::rootPairsToCoeffs<FP>(poles());
   }
 
-  int getNumPoles () const
-  {
-    return m_numPoles;
+  template <typename FP>
+  std::vector<FP> getNumerator() const {
+    return Layout::rootPairsToCoeffs<FP>(zeros());
   }
 
-  int getMaxPoles () const
-  {
-    return m_maxPoles;
+ protected:
+  template <typename FP>
+  static std::vector<FP> rootPairsToCoeffs(
+      const std::vector<RootPair<double>>& rootPairs, const size_t& order = 0) {
+    if (!rootPairs.size()) return std::vector<FP>{FP(1)};
+    size_t coeffSize = order;
+    // recalculate size to reserve for coefficients
+    if (order < rootPairs.size()) {
+      coeffSize = std::reduce(rootPairs.cbegin(), rootPairs.cend(), 0,
+                              [](const size_t& x, const RootPair<double>& y) {
+                                return x + y.order();
+                              });
+    }
+    std::vector<double> res;
+    res.reserve(coeffSize + 1);
+    for (const auto& rp : rootPairs) {
+      // convolute over each pairs of roots to get resultant polynomial
+      // coefficients
+      switch (rp.order()) {
+        case 0:
+          throw std::runtime_error("Unitialized root pair not allowed!");
+        case 1:
+          // roots contained in rp is of first order. Convolute with [1, -r]
+          res = conv(res, {1., -rp.first.real()});
+          continue;
+        case 2:
+          // roots contained in rp is of second order and is a conjugate pair.
+          // Convolute with [1,-2*r.real(),r.real()*r.real()+r.imag()*r.imag()]
+          res = conv(res, {1., -2. * rp.first.real(),
+                           rp.first.real() * rp.first.real() +
+                               rp.first.imag() * rp.first.imag()});
+          continue;
+        default:
+          continue;
+      }
+    }
+    // coefficients need to be casted to desired type.
+    if (std::is_same<T, double>::value) return res;
+    std::vector<FP> coeffs;
+    coeffs.reserve(res.size());
+    std::transform(res.cbegin(), res.cend(), coeffs.begin(),
+                   [](const double& x) { return FP(x); });
+    return coeffs;
   }
 
-  void add (const complex_t& pole, const complex_t& zero)
-  {
-    assert (!(m_numPoles&1)); // single comes last
-    assert (!Dsp::is_nan (pole));
-    m_pair[m_numPoles/2] = PoleZeroPair (pole, zero);
-    ++m_numPoles;
-  }
-
-  void addPoleZeroConjugatePairs (const complex_t pole,
-                                  const complex_t zero)
-  {
-    assert (!(m_numPoles&1)); // single comes last
-    assert (!Dsp::is_nan (pole));
-    m_pair[m_numPoles/2] = PoleZeroPair (
-      pole, zero, std::conj (pole), std::conj (zero));
-    m_numPoles += 2;
-  }
-
-  void add (const ComplexPair& poles, const ComplexPair& zeros)
-  {
-    assert (!(m_numPoles&1)); // single comes last
-    //assert (poles.isMatchedPair () || zeros.isMatchedPair ());
-    m_pair[m_numPoles/2] = PoleZeroPair (poles.first, zeros.first,
-                                         poles.second, zeros.second);
-    m_numPoles += 2;
-  }
-
-  const PoleZeroPair& getPair (int pairIndex) const
-  {
-    assert (pairIndex >= 0 && pairIndex < (m_numPoles+1)/2);
-    return m_pair[pairIndex];
-  }
-
-  const PoleZeroPair& operator[] (int pairIndex) const
-  {
-    return getPair (pairIndex);
-  }
-
-  double getNormalW () const
-  {
-    return m_normalW;
-  }
-
-  double getNormalGain () const
-  {
-    return m_normalGain;
-  }
-
-  void setNormal (double w, double g)
-  {
-    m_normalW = w;
-    m_normalGain = g;
-  }
-
-protected:
-  int m_numPoles;
-
-private:
-  int m_maxPoles;
-  PoleZeroPair<FP>* m_pair;
-  double m_normalW;
-  double m_normalGain;
+ private:
+  double normalW_;
+  double normalGain_;
 };
 
-//------------------------------------------------------------------------------
-
-// Storage for Layout
-template <int MaxPoles>
-class Layout
-{
-public:
-  operator LayoutBase ()
-  {
-    return LayoutBase (MaxPoles, m_pairs);
-  }
-
-private:
-  PoleZeroPair m_pairs[(MaxPoles+1)/2];
-};
-
-}
+}  // namespace Dsp
 
 #endif

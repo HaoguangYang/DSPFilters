@@ -52,8 +52,7 @@ namespace Dsp {
  */
 
 // Unique IDs to help identify parameters
-enum ParamID
-{
+enum ParamID {
   idSampleRate,
   idFrequency,
   idQ,
@@ -75,159 +74,125 @@ enum ParamID
   idZeroReal
 };
 
-enum
-{
-  maxParameters = 8
-};
+enum { maxParameters = 8 };
 
-struct Params
-{
-  void clear ()
-  {
-    for (int i = 0; i < maxParameters; ++i)
-      value[i] = 0;
-  }
-
-  double& operator[] (int index)
-  {
-    return value[index];
-  }
-
-  const double& operator[] (int index) const
-  {
-    return value[index];
-  }
-
-  double value[maxParameters];
-};
+typedef std::vector<double> Params;
 
 //
 // Provides meta-information about a filter parameter
 // to achieve run-time introspection.
 //
-class ParamInfo
-{
-public:
-  typedef double (ParamInfo::*toControlValue_t) (double) const;
-  typedef double (ParamInfo::*toNativeValue_t) (double) const;
-  typedef std::string (ParamInfo::*toString_t) (double) const;
+class ParamInfo {
+ public:
+  typedef double (ParamInfo::*toControlValue_t)(double) const;
+  typedef double (ParamInfo::*toNativeValue_t)(double) const;
+  typedef std::string (ParamInfo::*toString_t)(double) const;
 
   // dont use this one
-  ParamInfo (); // throws std::logic_error
-
-  ParamInfo (ParamID id,
-              const char* szLabel,
-              const char* szName,
-              double arg1,
-              double arg2,
-              double defaultNativeValue,
-              toControlValue_t toControlValue_proc,
-              toNativeValue_t toNativeValue_proc,
-              toString_t toString_proc)
-                  : m_id (id)
-    , m_szLabel (szLabel)
-    , m_szName (szName)
-    , m_arg1 (arg1)
-    , m_arg2 (arg2)
-    , m_defaultNativeValue (defaultNativeValue)
-    , m_toControlValue (toControlValue_proc)
-    , m_toNativeValue (toNativeValue_proc)
-    , m_toString (toString_proc)
-  {
+  ParamInfo() {
+    // throws std::logic_error
+    throw std::logic_error("invalid usage of ParamInfo");
   }
+
+  ParamInfo(ParamID id, const char* szLabel, const char* szName, double arg1,
+            double arg2, double defaultNativeValue,
+            toControlValue_t toControlValue_proc,
+            toNativeValue_t toNativeValue_proc, toString_t toString_proc)
+      : m_id(id),
+        m_szLabel(szLabel),
+        m_szName(szName),
+        m_arg1(arg1),
+        m_arg2(arg2),
+        m_defaultNativeValue(defaultNativeValue),
+        m_toControlValue(toControlValue_proc),
+        m_toNativeValue(toNativeValue_proc),
+        m_toString(toString_proc) {}
 
   // Used to identify well-known parameters (like cutoff frequency)
-  ParamID getId () const
-  {
-    return m_id;
-  }
+  ParamID getId() const { return m_id; }
 
   // Returns a short label suitable for placement on a control
-  const char* getLabel () const
-  {
-    return m_szLabel;
-  }
+  const char* getLabel() const { return m_szLabel; }
 
   // Returns the full name
-  const char* getName () const
-  {
-    return m_szName;
-  }
+  const char* getName() const { return m_szName; }
 
-  double getDefaultValue () const
-  {
-    return m_defaultNativeValue;
-  }
+  double getDefaultValue() const { return m_defaultNativeValue; }
 
   //
   // Control value is always in the range [0..1]
   //
-  double toControlValue (double nativeValue) const
-  {
-    return (this->*m_toControlValue) (nativeValue);
+  double toControlValue(double nativeValue) const {
+    return (this->*m_toControlValue)(nativeValue);
   }
 
   //
   // Native value is in filter-specific units. For example,
   // cutoff frequency would probably be in Hertz.
   //
-  double toNativeValue (double controlValue) const
-  {
-    return (this->*m_toNativeValue) (controlValue);
+  double toNativeValue(double controlValue) const {
+    return (this->*m_toNativeValue)(controlValue);
   }
 
-  std::string toString (double nativeValue) const
-  {
-    return (this->*m_toString) (nativeValue);
+  std::string toString(double nativeValue) const {
+    return (this->*m_toString)(nativeValue);
   }
 
-  double clamp (double nativeValue) const;
+  double clamp(double nativeValue) const {
+    const double minValue = toNativeValue(0);
+    const double maxValue = toNativeValue(1);
+    if (nativeValue < minValue)
+      nativeValue = minValue;
+    else if (nativeValue > maxValue)
+      nativeValue = maxValue;
+    return nativeValue;
+  }
 
   //
   // These routines are used as function pointers when
   // constructing the various ParamInfo used by filters
   //
 
-  double Int_toControlValue (double nativeValue) const;
-  double Int_toNativeValue (double controlValue) const;
+  double Int_toControlValue(double nativeValue) const;
+  double Int_toNativeValue(double controlValue) const;
 
-  double Real_toControlValue (double nativeValue) const;
-  double Real_toNativeValue (double controlValue) const;
+  double Real_toControlValue(double nativeValue) const;
+  double Real_toNativeValue(double controlValue) const;
 
-  double Log_toControlValue (double nativeValue) const;
-  double Log_toNativeValue (double controlValue) const;
+  double Log_toControlValue(double nativeValue) const;
+  double Log_toNativeValue(double controlValue) const;
 
-  double Pow2_toControlValue (double nativeValue) const;
-  double Pow2_toNativeValue (double controlValue) const;
+  double Pow2_toControlValue(double nativeValue) const;
+  double Pow2_toNativeValue(double controlValue) const;
 
-  std::string Int_toString (double nativeValue) const;
-  std::string Hz_toString (double nativeValue) const;
-  std::string Real_toString (double nativeValue) const;
-  std::string Db_toString (double nativeValue) const;
+  std::string Int_toString(double nativeValue) const;
+  std::string Hz_toString(double nativeValue) const;
+  std::string Real_toString(double nativeValue) const;
+  std::string Db_toString(double nativeValue) const;
 
   //
   // Creates the specified ParamInfo
   //
 
-  static ParamInfo defaultSampleRateParam ();
-  static ParamInfo defaultCutoffFrequencyParam ();
-  static ParamInfo defaultCenterFrequencyParam ();
-  static ParamInfo defaultQParam ();
-  static ParamInfo defaultBandwidthParam ();
-  static ParamInfo defaultBandwidthHzParam ();
-  static ParamInfo defaultGainParam ();
-  static ParamInfo defaultSlopeParam ();
-  static ParamInfo defaultRippleDbParam ();
-  static ParamInfo defaultStopDbParam ();
-  static ParamInfo defaultRolloffParam ();
-  static ParamInfo defaultPoleRhoParam ();
-  static ParamInfo defaultPoleThetaParam ();
-  static ParamInfo defaultZeroRhoParam ();
-  static ParamInfo defaultZeroThetaParam ();
-  static ParamInfo defaultPoleRealParam ();
-  static ParamInfo defaultZeroRealParam ();
+  static ParamInfo defaultSampleRateParam();
+  static ParamInfo defaultCutoffFrequencyParam();
+  static ParamInfo defaultCenterFrequencyParam();
+  static ParamInfo defaultQParam();
+  static ParamInfo defaultBandwidthParam();
+  static ParamInfo defaultBandwidthHzParam();
+  static ParamInfo defaultGainParam();
+  static ParamInfo defaultSlopeParam();
+  static ParamInfo defaultRippleDbParam();
+  static ParamInfo defaultStopDbParam();
+  static ParamInfo defaultRolloffParam();
+  static ParamInfo defaultPoleRhoParam();
+  static ParamInfo defaultPoleThetaParam();
+  static ParamInfo defaultZeroRhoParam();
+  static ParamInfo defaultZeroThetaParam();
+  static ParamInfo defaultPoleRealParam();
+  static ParamInfo defaultZeroRealParam();
 
-private:
+ private:
   ParamID m_id;
   const char* m_szLabel;
   const char* m_szName;
@@ -239,6 +204,6 @@ private:
   toString_t m_toString;
 };
 
-}
+}  // namespace Dsp
 
 #endif

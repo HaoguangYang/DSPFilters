@@ -42,8 +42,8 @@ THE SOFTWARE.
 #ifndef __m128_buggy_gxx_up_to_4_7_type
 #define __m128_buggy_gxx_up_to_4_7_type
 union __m128_buggy_gxx_up_to_4_7 {
-    __m128 v;
-    float e[4];
+  __m128 v;
+  float e[4];
 };
 #endif
 #endif
@@ -51,17 +51,16 @@ union __m128_buggy_gxx_up_to_4_7 {
 #include <arm_neon.h>
 #endif
 
-#include "DspFilters/Common.h"
-#include "DspFilters/Biquad.h"
-
-#include <stdexcept>
-#include <iterator>
-
 #include <deque>
 #include <initializer_list>
-#include <vector>
-#include <numeric>
+#include <iterator>
 #include <memory>
+#include <numeric>
+#include <stdexcept>
+#include <vector>
+
+#include "DspFilters/Biquad.h"
+#include "DspFilters/Common.h"
 
 namespace Dsp {
 
@@ -73,19 +72,20 @@ namespace Dsp {
 
 /**
  * @brief A ring buffer data structure to store state data of each channel
- * 
+ *
  * @tparam T data type
  */
 template <typename T>
 class RingBuffer {
  public:
-  RingBuffer(const size_t& capacity) : buffer_(capacity), capacity_(std::min(capacity, buffer_.max_size())) {
+  RingBuffer(const size_t& capacity)
+      : buffer_(capacity), capacity_(std::min(capacity, buffer_.max_size())) {
     buffer_.clear();
   }
 
   void enqueue(const T& item) {
     if (isFull()) {
-      buffer_.pop_back(); // Remove the tail item to make space
+      buffer_.pop_back();  // Remove the tail item to make space
     }
     buffer_.push_front(item);
   }
@@ -119,21 +119,14 @@ class RingBuffer {
 
   void resize(const size_t& newCapacity) {
     capacity_ = newCapacity;
-    if (buffer_.size() > newCapacity)
-      buffer_.resize(newCapacity);
+    if (buffer_.size() > newCapacity) buffer_.resize(newCapacity);
   }
 
-  bool isEmpty() const {
-    return buffer_.empty();
-  }
+  bool isEmpty() const { return buffer_.empty(); }
 
-  bool isFull() const {
-    return buffer_.size() == capacity_;
-  }
+  bool isFull() const { return buffer_.size() == capacity_; }
 
-  size_t getSize() const {
-    return buffer_.size();
-  }
+  size_t getSize() const { return buffer_.size(); }
 
   std::vector<T> getAllElements() const {
     return std::vector<T>(buffer_.begin(), buffer_.end());
@@ -141,21 +134,13 @@ class RingBuffer {
 
   std::deque<T> getRawBuffer() const { return buffer_; }
 
-  T& operator[](size_t index) {
-    return buffer_[index];
-  }
+  T& operator[](size_t index) { return buffer_[index]; }
 
-  const T& operator[](size_t index) const {
-    return buffer_[index];
-  }
+  const T& operator[](size_t index) const { return buffer_[index]; }
 
-  T* begin() {
-    return buffer_.begin();
-  }
+  T* begin() { return buffer_.begin(); }
 
-  T* end() {
-    return buffer_.end();
-  }
+  T* end() { return buffer_.end(); }
 
  private:
   std::deque<T> buffer_;
@@ -170,62 +155,59 @@ class RingBuffer {
  * Difference equation:
  *
  *  y[n] = (b0/a0)*x[n] + (b1/a0)*x[n-1] + (b2/a0)*x[n-2]
- *                      - (a1/a0)*y[n-1] - (a2/a0)*y[n-2]  
+ *                      - (a1/a0)*y[n-1] - (a2/a0)*y[n-2]
  */
 template <class FP>
-class DirectFormI
-{
-public:
-  typedef FP FPType;
+class DirectFormI {
+ public:
+  typedef FP SignalType;
 
   DirectFormI(const BiquadBase<FP>& s) : m_coeffs_(s) {
     size_t N1 = s.m_b.size();
     size_t M1 = s.m_a.size();
-    assert(M1 > 0 && s.m_a[0] == 1. && "ERROR: First term of the denominator should be normalized to 1.");
+    assert(M1 > 0 && s.m_a[0] == 1. &&
+           "ERROR: First term of the denominator should be normalized to 1.");
     m_x_ = std::make_unique<RingBuffer<FP>>(N1);
-    m_y_ = std::make_unique<RingBuffer<FP>>(M1-1);
+    m_y_ = std::make_unique<RingBuffer<FP>>(M1 - 1);
     reset();
   }
 
-  DirectFormI ()
-  {
+  DirectFormI() {
     m_x_ = std::make_unique<RingBuffer<FP>>(3);
     m_y_ = std::make_unique<RingBuffer<FP>>(2);
     reset();
   }
 
-  void reset ()
-  {
+  void reset() {
     m_x_->clear();
     m_y_->clear();
   }
 
-  inline FP process1 (const FP& in,
-                      const BiquadBase<FP>& s,
-                      const FP& vsa) // very small amount
+  inline FP process1(const FP& in, const BiquadBase<FP>& s,
+                     const FP& vsa)  // very small amount
   {
     m_x_->enqueue(in);
-    FP out = s.m_b[0]*m_x_[0] + s.m_b[1]*m_x_[1] + s.m_b[2]*m_x_[2]
-                       - s.m_a[1]*m_y_[0] - s.m_a[2]*m_y_[1];
-             + vsa;
+    FP out = s.m_b[0] * m_x_[0] + s.m_b[1] * m_x_[1] + s.m_b[2] * m_x_[2] -
+             s.m_a[1] * m_y_[0] - s.m_a[2] * m_y_[1];
+    +vsa;
     m_y_->enqueue(out);
     return out;
   }
 
-  inline FP process1 (const FP& in, const FP& vsa) // very small amount
+  inline FP process1(const FP& in, const FP& vsa)  // very small amount
   {
     m_x_->enqueue(in);
-    FP out = std::transform_reduce(m_coeffs_.m_b.begin(), m_coeffs_.m_b.end(), m_x_->begin(), FP(0),
-                                 std::plus<FP>(), std::multiplies<FP>());
-    out -= std::transform_reduce(m_coeffs_.m_a.begin()+1, m_coeffs_.m_a.end(), m_y_->begin(), -vsa,
-                                 std::plus<FP>(), std::multiplies<FP>());
+    FP out = std::inner_product(m_coeffs_.m_b.begin(), m_coeffs_.m_b.end(),
+                                m_x_->begin(), FP(0));
+    out -= std::inner_product(m_coeffs_.m_a.begin() + 1, m_coeffs_.m_a.end(),
+                              m_y_->begin(), -vsa);
     m_y_->enqueue(out);
     return out;
   }
 
-protected:
-  std::unique_ptr<RingBuffer<FP>> m_x_; // Ring buffer for x[n]...x[n-N]
-  std::unique_ptr<RingBuffer<FP>> m_y_; // Ring buffer for y[n-1]...y[n-M]
+ protected:
+  std::unique_ptr<RingBuffer<FP>> m_x_;  // Ring buffer for x[n]...x[n-N]
+  std::unique_ptr<RingBuffer<FP>> m_y_;  // Ring buffer for y[n-1]...y[n-M]
 
   BiquadBase<FP> m_coeffs_;
 };
@@ -242,29 +224,21 @@ protected:
  *
  */
 template <class FP>
-class DirectFormII
-{
-public:
-  typedef FP FPType;
+class DirectFormII {
+ public:
+  typedef FP SignalType;
   static constexpr bool HasSimd = false;
 
-  DirectFormII ()
-  {
-    reset ();
-  }
+  DirectFormII() { reset(); }
 
-  void reset ()
-  {
+  void reset() {
     m_v1 = FP();
     m_v2 = FP();
   }
 
-  FP process1 (const FP& in,
-               const BiquadBase<FP>& s,
-               const FP& vsa)
-  {
-    FP w   = in - s.m_a[1]*m_v1 - s.m_a[2]*m_v2 + vsa;
-    FP out =      s.m_b[0]*w    + s.m_b[1]*m_v1 + s.m_b[2]*m_v2;
+  FP process1(const FP& in, const BiquadBase<FP>& s, const FP& vsa) {
+    FP w = in - s.m_a[1] * m_v1 - s.m_a[2] * m_v2 + vsa;
+    FP out = s.m_b[0] * w + s.m_b[1] * m_v1 + s.m_b[2] * m_v2;
 
     m_v2 = m_v1;
     m_v1 = w;
@@ -272,13 +246,12 @@ public:
     return out;
   }
 
-private:
-  FP m_v1; // v[-1]
-  FP m_v2; // v[-2]
+ private:
+  FP m_v1;  // v[-1]
+  FP m_v2;  // v[-2]
 };
 
 //------------------------------------------------------------------------------
-
 
 /*
  * Transposed Direct Form I and II
@@ -291,19 +264,14 @@ private:
 
 // I think this one is broken
 template <class FP>
-class TransposedDirectFormI
-{
-public:
-  typedef FP FPType;
+class TransposedDirectFormI {
+ public:
+  typedef FP SignalType;
   static constexpr bool HasSimd = false;
 
-  TransposedDirectFormI ()
-  {
-    reset ();
-  }
+  TransposedDirectFormI() { reset(); }
 
-  void reset ()
-  {
+  void reset() {
     m_v = FP();
     m_s1 = FP();
     m_s1_1 = FP();
@@ -316,19 +284,17 @@ public:
   }
 
   template <typename Sample, typename FP>
-  inline Sample process1 (const Sample in,
-                          const BiquadBase<FP>& s,
-                          const double vsa)
-  {
+  inline Sample process1(const Sample in, const BiquadBase<FP>& s,
+                         const double vsa) {
     FP out;
 
     // can be: in += m_s1_1;
     m_v = in + m_s1_1;
-    out = s.m_b[0]*m_v + m_s3_1 + vsa;
-    m_s1 = m_s2_1 - s.m_a[1]*m_v;
-    m_s2 = -s.m_a[2]*m_v;
-    m_s3 = s.m_b[1]*m_v + m_s4_1;
-    m_s4 = s.m_b[2]*m_v; 
+    out = s.m_b[0] * m_v + m_s3_1 + vsa;
+    m_s1 = m_s2_1 - s.m_a[1] * m_v;
+    m_s2 = -s.m_a[2] * m_v;
+    m_s3 = s.m_b[1] * m_v + m_s4_1;
+    m_s4 = s.m_b[2] * m_v;
 
     m_s4_1 = m_s4;
     m_s3_1 = m_s3;
@@ -338,7 +304,7 @@ public:
     return out;
   }
 
-private:
+ private:
   FP m_v;
   FP m_s1;
   FP m_s1_1;
@@ -352,19 +318,14 @@ private:
 
 //------------------------------------------------------------------------------
 template <class FP>
-class TransposedDirectFormII
-{
-public:
-  typedef FP FPType;
+class TransposedDirectFormII {
+ public:
+  typedef FP SignalType;
   static constexpr bool HasSimd = false;
 
-  TransposedDirectFormII ()
-  {
-    reset ();
-  }
+  TransposedDirectFormII() { reset(); }
 
-  void reset ()
-  {
+  void reset() {
     m_s1 = FP();
     m_s1_1 = FP();
     m_s2 = FP();
@@ -372,22 +333,20 @@ public:
   }
 
   template <typename Sample, typename FP>
-  inline Sample process1 (const Sample in,
-                          const BiquadBase<FP>& s,
-                          const FP vsa)
-  {
+  inline Sample process1(const Sample in, const BiquadBase<FP>& s,
+                         const FP vsa) {
     FP out;
 
-    out = m_s1_1 + s.m_b[0]*in + vsa;
-    m_s1 = m_s2_1 + s.m_b[1]*in - s.m_a[1]*out;
-    m_s2 = s.m_b[2]*in - s.m_a[2]*out;
+    out = m_s1_1 + s.m_b[0] * in + vsa;
+    m_s1 = m_s2_1 + s.m_b[1] * in - s.m_a[1] * out;
+    m_s2 = s.m_b[2] * in - s.m_a[2] * out;
     m_s1_1 = m_s1;
     m_s2_1 = m_s2;
 
-    return static_cast<Sample> (out);
+    return static_cast<Sample>(out);
   }
 
-private:
+ private:
   FP m_s1;
   FP m_s1_1;
   FP m_s2;
@@ -398,99 +357,74 @@ private:
 
 // Holds an array of states suitable for multi-channel processing
 template <int Channels, class StateType>
-class ChannelsState
-{
-public:
-  ChannelsState ()
-  {
+class ChannelsState {
+ public:
+  ChannelsState() {}
+
+  int getNumChannels() const { return Channels; }
+
+  void reset() {
+    for (int i = 0; i < Channels; ++i) m_state[i].reset();
   }
 
-  int getNumChannels() const
-  {
-    return Channels;
-  }
-
-  void reset ()
-  {
-    for (int i = 0; i < Channels; ++i)
-      m_state[i].reset();
-  }
-
-  StateType& operator[] (int index)
-  {
-    assert (index >= 0 && index < Channels);
+  StateType& operator[](int index) {
+    assert(index >= 0 && index < Channels);
     return m_state[index];
   }
 
   template <class Filter, typename Sample>
-  void process (int numSamples,
-                Sample* const* arrayOfChannels,
-                Filter& filter)
-  {
+  void process(int numSamples, Sample* const* arrayOfChannels, Filter& filter) {
     for (int i = 0; i < Channels; ++i)
-      filter.process (numSamples, arrayOfChannels[i], m_state[i]);
+      filter.process(numSamples, arrayOfChannels[i], m_state[i]);
   }
 
   template <class Filter, typename... Iterators>
-  void process (Filter& filter,
-                Iterators... its
-                )
-  {
-    static_assert(sizeof...(its) == 2 * Channels, "The number of iterator pairs must match the number of channels.");
+  void process(Filter& filter, Iterators... its) {
+    static_assert(
+        sizeof...(its) == 2 * Channels,
+        "The number of iterator pairs must match the number of channels.");
     process_impl(filter, its...);
   }
 
-private:
+ private:
   template <class Filter, typename Iterator, typename... Iterators>
-  void process_impl (Filter& filter,
-                Iterator firstA, Iterator lastA,
-                Iterators... its
-                )
-  {
+  void process_impl(Filter& filter, Iterator firstA, Iterator lastA,
+                    Iterators... its) {
     static_assert(sizeof...(its) % 2 == 0, "Must pass iterators in pairs");
-    filter.process (firstA, lastA, m_state[Channels - sizeof...(its) / 2 - 1]);
+    filter.process(firstA, lastA, m_state[Channels - sizeof...(its) / 2 - 1]);
     process_impl(filter, its...);
   }
 
   template <class Filter>
-  void process_impl (Filter& filter) {}
+  void process_impl(Filter& filter) {}
 
   StateType m_state[Channels];
 };
 
 // Empty state, can't process anything
 template <class StateType>
-class ChannelsState <0, StateType>
-{
-public:
-  int getNumChannels() const
-  {
-    return 0;
-  }
+class ChannelsState<0, StateType> {
+ public:
+  int getNumChannels() const { return 0; }
 
-  void reset ()
-  {
-    throw std::logic_error ("attempt to reset empty ChannelState");
+  void reset() {
+    throw std::logic_error("attempt to reset empty ChannelState");
   }
 
   template <class FilterDesign, typename Sample>
-  void process (int /*numSamples*/,
-                Sample* const* /*arrayOfChannels*/,
-                FilterDesign& /*filter*/)
-  {
-    throw std::logic_error ("attempt to process empty ChannelState");
+  void process(int /*numSamples*/, Sample* const* /*arrayOfChannels*/,
+               FilterDesign& /*filter*/) {
+    throw std::logic_error("attempt to process empty ChannelState");
   }
 
   template <class Filter, typename It>
-  void process (It first,
-                Filter& filter)
-  {
-    throw std::logic_error ("attempt to process empty ChannelState");
+  void process(It first, Filter& filter) {
+    throw std::logic_error("attempt to process empty ChannelState");
   }
 };
 
 //------------------------------------------------------------------------------
 
-}
+}  // namespace Dsp
 
 #endif

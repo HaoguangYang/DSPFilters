@@ -43,22 +43,6 @@ THE SOFTWARE.
 
 namespace Dsp {
 
-ParamInfo::ParamInfo ()
-{
-  throw std::logic_error ("invalid usage of ParamInfo");
-}
-
-double ParamInfo::clamp (double nativeValue) const
-{
-  const double minValue = toNativeValue (0);
-  const double maxValue = toNativeValue (1);
-  if (nativeValue < minValue)
-    nativeValue = minValue;
-  else if (nativeValue > maxValue)
-    nativeValue = maxValue;
-  return nativeValue;
-}
-
 //------------------------------------------------------------------------------
 
 double ParamInfo::Int_toControlValue (double nativeValue) const

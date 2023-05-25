@@ -46,7 +46,6 @@ namespace Dsp {
 // complex-valued coefficients using a numerical method.
 //
 
-template <typename FP>
 class RootFinderBase {
  public:
   //
@@ -55,29 +54,129 @@ class RootFinderBase {
   // The solutions are placed in roots.
   //
   void solve(const int &degree, const bool &polish = true,
-             const bool &doSort = true);
+             const bool &doSort = true) {
+    assert(degree <= m_maxdegree);
+
+    const double EPS = 1.0e-30;
+
+    int its;
+    complex_t<double> x, b, c;
+
+    int m = degree;
+
+    // copy coefficients
+    for (int j = 0; j <= m; ++j) m_ad[j] = m_a[j];
+
+    // for each root
+    for (int j = m - 1; j >= 0; --j) {
+      // initial guess at 0
+      x = 0.0;
+      laguerre(j + 1, m_ad, x, its);
+
+      if (fabs(x.imag()) <= 2.0 * EPS * fabs(x.real()))
+        x = complex_t<double>(x.real(), 0.0);
+
+      m_root[j] = x;
+
+      // deflate
+      b = m_ad[j + 1];
+      for (int jj = j; jj >= 0; --jj) {
+        c = m_ad[jj];
+        m_ad[jj] = b;
+        b = x * b + c;
+      }
+    }
+
+    if (polish)
+      for (int j = 0; j < m; ++j) laguerre(degree, m_a, m_root[j], its);
+
+    if (doSort) sort(degree);
+  }
 
   // Evaluates the polynomial at x
-  std::complex<FP> eval(const int &degree, const std::complex<FP> &x);
+  complex_t<double> eval(const int &degree, const complex_t<double> &x) {
+    complex_t<double> y;
+    if (x != 0.) {
+      complex_t<double> pow_x = 1.0;
+      for (int i = 0; i <= degree; ++i) {
+        y += m_a[i] * pow_x;
+        pow_x *= x;
+      }
+    } else {
+      y = m_a[0];
+    }
+    return y;
+  }
 
   // Direct access to the input coefficient array of size degree+1.
-  std::complex<FP> *coef() { return m_a; }
+  complex_t<double> *coef() { return m_a.data(); }
 
   // Direct access to the resulting roots array of size degree
-  complex_t *root() { return m_root; }
+  complex_t<double> *root() { return m_root.data(); }
 
   // sort the roots by descending imaginary part
-  void sort(const int &degree);
+  void sort(const int &degree) {
+    std::sort(m_root.begin(), m_root.end(),
+              [](const complex_t<double> &a, const complex_t<double> &b) {
+                return a.imag() > b.imag();
+              });
+  }
 
  private:
   // Improves x as a root using Laguerre's method.
   // The input coefficient array has degree+1 elements.
-  void laguerre(const int &degree, const std::vector<std::complex<FP>> &a,
-                std::complex<FP> &x, const int &its);
+  void laguerre(const int &degree, const std::vector<complex_t<double>> &a,
+                complex_t<double> &x, int &its) const {
+    const int MR = 8, MT = 10, MAXIT = MT * MR;
+    const double EPS = std::numeric_limits<double>::epsilon();
+
+    static const double frac[MR + 1] = {0.0,  0.5,  0.25, 0.75, 0.13,
+                                    0.38, 0.62, 0.88, 1.0};
+
+    complex_t<double> dx, x1, b, d, f, g, h, sq, gp, gm, g2;
+
+    int m = degree;
+    for (int iter = 1; iter <= MAXIT; ++iter) {
+      its = iter;
+      b = a[m];
+      double err = std::abs(b);
+      d = f = 0.0;
+      double abx = std::abs(x);
+      for (int j = m - 1; j >= 0; --j) {
+        f = x * f + d;
+        d = x * d + b;
+        b = x * b + a[j];
+        err = std::abs(b) + abx * err;
+      }
+      err *= EPS;
+      if (std::abs(b) <= err) return;
+      g = d / b;
+      g2 = g * g;
+      h = g2 - 2.0 * f / b;
+
+      sq = std::sqrt(double(m - 1) * (double(m) * h - g2));
+      gp = g + sq;
+      gm = g - sq;
+
+      double abp = std::abs(gp);
+      double abm = std::abs(gm);
+      if (abp < abm) gp = gm;
+      dx =
+          std::max(abp, abm) > 0.0 ? double(m) / gp : std::polar(1 + abx, double(iter));
+      x1 = x - dx;
+      if (x == x1) return;
+      if (iter % MT != 0)
+        x = x1;
+      else
+        x -= frac[iter / MT] * dx;
+    }
+
+    throw std::logic_error("laguerre failed");
+  }
 
  protected:
   int m_maxdegree;
-  std::vector<std::complex<FP>>
+  std::vector<complex_t<double>>
       m_a,     // input coefficients (m_maxdegree+1 elements)
       m_ad,    // copy of deflating coefficients
       m_root;  // array of roots (maxdegree elements)
@@ -85,8 +184,8 @@ class RootFinderBase {
 
 //------------------------------------------------------------------------------
 
-template <int maxdegree, typename FP>
-struct RootFinder : RootFinderBase<FP> {
+template <int maxdegree>
+struct RootFinder : RootFinderBase {
   RootFinder() {
     m_maxdegree = maxdegree;
     m_a.reserve(maxdegree + 1);
