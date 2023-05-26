@@ -52,25 +52,6 @@ namespace Dsp {
 
 namespace Bessel {
 
-// A Workspace is necessary to find roots
-struct WorkspaceBase {
-  WorkspaceBase(RootFinderBase* rootsBase) : roots(*rootsBase) {}
-
-  RootFinderBase& roots;
-
- private:
-  WorkspaceBase(WorkspaceBase&);
-  WorkspaceBase& operator=(WorkspaceBase&) { return *this; }
-};
-
-template <int MaxOrder>
-struct Workspace : WorkspaceBase {
-  Workspace() : WorkspaceBase(&m_roots) {}
-
- private:
-  RootFinder<MaxOrder> m_roots;
-};
-
 //------------------------------------------------------------------------------
 // returns the k-th zero based coefficient of the reverse bessel polynomial of
 // degree n
@@ -86,23 +67,21 @@ class AnalogLowPass : public Layout {
  public:
   AnalogLowPass() { setNormal(0, 1); }
 
-  void design(const int numPoles, WorkspaceBase* w) {
+  void design(const size_t& numPoles) {
     if (getNumPoles() != numPoles) {
       clear();
-      RootFinderBase& solver(w->roots);
-      for (int i = 0; i < numPoles + 1; ++i)
-        solver.coef()[i] = reversebessel(i, numPoles);
+      std::vector<double> coef(numPoles + 1);
+      for (size_t i = 0; i < numPoles + 1; ++i)
+        coef[i] = reversebessel(i, numPoles);
+      RootFinder solver(coef);
+      // roots are sorted, such that we only care about half of them
+      // (upper half plane)
       solver.solve(numPoles);
-      
-      // FIXME: wrong formulation. refer to pole_filter.
       const int pairs = numPoles / 2;
       for (int i = 0; i < pairs; ++i) {
-        complex_t<double> c = solver.root()[i];
-        appendConjugatePairs(c, false);
+        appendConjugatePairs(solver.root()[i], false);
       }
-
-      if (numPoles % 2)
-        append(solver.root()[pairs].real(), false);
+      if (numPoles % 2) append(solver.root()[pairs].real(), false);
     }
   }
 };
@@ -112,32 +91,26 @@ class AnalogLowShelf : public Layout {
  public:
   AnalogLowShelf() { setNormal(doublePi, 1); }
 
-  void design(int numPoles, double gainDb, WorkspaceBase* w) {
+  void design(int numPoles, double gainDb) {
     if (getNumPoles() != numPoles || m_gainDb != gainDb) {
       m_gainDb = gainDb;
       clear();
 
       const double G = std::pow(10., gainDb / 20) - 1.;
-      RootFinderBase& poles(w->roots);
+      std::vector<double> coef(numPoles + 1);
       for (int i = 0; i < numPoles + 1; ++i)
-        poles.coef()[i] = reversebessel(i, numPoles);
+        coef[i] = reversebessel(i, numPoles);
+      RootFinder poles(coef);
       poles.solve(numPoles);
 
-      RootFinder<50> zeros;
-      for (int i = 0; i < numPoles + 1; ++i)
-        zeros.coef()[i] = reversebessel(i, numPoles);
-      double a0 = reversebessel(0, numPoles);
-      zeros.coef()[0] += G * a0;
+      coef[0] *= (1.0 + G);
+      RootFinder zeros(coef);
       zeros.solve(numPoles);
 
-      // FIXME: wrong formulation. refer to pole_filter.
       const int pairs = numPoles / 2;
       for (int i = 0; i < pairs; ++i) {
-        complex_t<double> p = poles.root()[i];
-        complex_t<double> z = zeros.root()[i];
-        appendConjugatePairs(p, z);
+        appendConjugatePairs(poles.root()[i], zeros.root()[i]);
       }
-
       if (numPoles % 2)
         append(poles.root()[pairs].real(), zeros.root()[pairs].real());
     }
@@ -151,64 +124,60 @@ class AnalogLowShelf : public Layout {
 
 // Factored implementations to reduce template instantiations
 struct LowPassBase : AnalogPoleFilterBase<AnalogLowPass> {
-  void setup(int order, double sampleRate, double cutoffFrequency,
-             WorkspaceBase* w) {
-    m_analogProto.design(order, w);
+  void setup(int order, double sampleRate, double cutoffFrequency) {
+    m_analogProto.design(order);
 
-    LowPassTransform(cutoffFrequency / sampleRate, this->m_digitalProto,
-                         this->m_analogProto);
+    LowPassTransform(cutoffFrequency / sampleRate, m_digitalProto,
+                     m_analogProto);
 
-    Cascade::setLayout(this->m_digitalProto);
+    Cascade::setLayout(m_digitalProto);
   }
 };
 
 struct HighPassBase : AnalogPoleFilterBase<AnalogLowPass> {
-  void setup(int order, double sampleRate, double cutoffFrequency,
-             WorkspaceBase* w) {
-    m_analogProto.design(order, w);
+  void setup(int order, double sampleRate, double cutoffFrequency) {
+    m_analogProto.design(order);
 
-    HighPassTransform(cutoffFrequency / sampleRate, this->m_digitalProto,
-                          this->m_analogProto);
+    HighPassTransform(cutoffFrequency / sampleRate, m_digitalProto,
+                      m_analogProto);
 
-    Cascade::setLayout(this->m_digitalProto);
+    Cascade::setLayout(m_digitalProto);
   }
 };
 
 struct BandPassBase : AnalogPoleFilterBase<AnalogLowPass> {
   void setup(int order, double sampleRate, double centerFrequency,
-             double widthFrequency, WorkspaceBase* w) {
-    m_analogProto.design(order, w);
+             double widthFrequency) {
+    m_analogProto.design(order);
 
-    BandPassTransform(centerFrequency / sampleRate,
-                          widthFrequency / sampleRate, this->m_digitalProto,
-                          this->m_analogProto);
+    BandPassTransform(centerFrequency / sampleRate, widthFrequency / sampleRate,
+                      m_digitalProto, m_analogProto);
 
-    Cascade::setLayout(this->m_digitalProto);
+    Cascade::setLayout(m_digitalProto);
   }
 };
 
 struct BandStopBase : AnalogPoleFilterBase<AnalogLowPass> {
   void setup(int order, double sampleRate, double centerFrequency,
-             double widthFrequency, WorkspaceBase* w) {
-    m_analogProto.design(order, w);
+             double widthFrequency) {
+    m_analogProto.design(order);
 
-    BandStopTransform(centerFrequency / sampleRate,
-                          widthFrequency / sampleRate, this->m_digitalProto,
-                          this->m_analogProto);
+    BandStopTransform(centerFrequency / sampleRate, widthFrequency / sampleRate,
+                      m_digitalProto, m_analogProto);
 
-    Cascade::setLayout(this->m_digitalProto);
+    Cascade::setLayout(m_digitalProto);
   }
 };
 
 struct LowShelfBase : AnalogPoleFilterBase<AnalogLowShelf> {
   void setup(int order, double sampleRate, double cutoffFrequency,
-             double gainDb, WorkspaceBase* w) {
-    m_analogProto.design(order, gainDb, w);
+             double gainDb) {
+    m_analogProto.design(order, gainDb);
 
-    LowPassTransform(cutoffFrequency / sampleRate, this->m_digitalProto,
-                         this->m_analogProto);
+    LowPassTransform(cutoffFrequency / sampleRate, m_digitalProto,
+                     m_analogProto);
 
-    Cascade::setLayout(this->m_digitalProto);
+    Cascade::setLayout(m_digitalProto);
   }
 };
 
@@ -221,8 +190,7 @@ struct LowShelfBase : AnalogPoleFilterBase<AnalogLowShelf> {
 template <int MaxOrder>
 struct LowPass : PoleFilter<LowPassBase, MaxOrder> {
   void setup(int order, double sampleRate, double cutoffFrequency) {
-    Workspace<MaxOrder> w;
-    LowPassBase::setup(order, sampleRate, cutoffFrequency, &w);
+    LowPassBase::setup(order, sampleRate, cutoffFrequency);
   }
 };
 
@@ -430,4 +398,3 @@ struct LowShelf : OrderBase<MaxOrder, TypeIII, Bessel::LowShelf>,
 
 #endif
 
-/* This is a test of svn:external */

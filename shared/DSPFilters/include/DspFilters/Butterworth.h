@@ -113,8 +113,7 @@ class AnalogLowShelf : public Layout {
 //------------------------------------------------------------------------------
 
 // Factored implementations to reduce template instantiations
-template <typename FP>
-struct LowPassBase : AnalogPoleFilterBase<AnalogLowPass<FP>> {
+struct LowPassBase : AnalogPoleFilterBase<AnalogLowPass> {
   void setup(int order, double sampleRate, double cutoffFrequency) {
     m_analogProto.design(order);
     LowPassTransform(cutoffFrequency / sampleRate, m_digitalProto,
@@ -123,8 +122,7 @@ struct LowPassBase : AnalogPoleFilterBase<AnalogLowPass<FP>> {
   }
 };
 
-template <typename FP>
-struct HighPassBase : AnalogPoleFilterBase<AnalogLowPass<FP>> {
+struct HighPassBase : AnalogPoleFilterBase<AnalogLowPass> {
   void setup(int order, double sampleRate, double cutoffFrequency) {
     m_analogProto.design(order);
     HighPassTransform(cutoffFrequency / sampleRate, m_digitalProto,
@@ -133,8 +131,7 @@ struct HighPassBase : AnalogPoleFilterBase<AnalogLowPass<FP>> {
   }
 };
 
-template <typename FP>
-struct BandPassBase : AnalogPoleFilterBase<AnalogLowPass<FP>> {
+struct BandPassBase : AnalogPoleFilterBase<AnalogLowPass> {
   void setup(int order, double sampleRate, double centerFrequency,
              double widthFrequency) {
     m_analogProto.design(order);
@@ -144,8 +141,7 @@ struct BandPassBase : AnalogPoleFilterBase<AnalogLowPass<FP>> {
   }
 };
 
-template <typename FP>
-struct BandStopBase : AnalogPoleFilterBase<AnalogLowPass<FP>> {
+struct BandStopBase : AnalogPoleFilterBase<AnalogLowPass> {
   void setup(int order, double sampleRate, double centerFrequency,
              double widthFrequency) {
     this->m_analogProto.design(order);
@@ -155,8 +151,7 @@ struct BandStopBase : AnalogPoleFilterBase<AnalogLowPass<FP>> {
   }
 };
 
-template <typename FP>
-struct LowShelfBase : AnalogPoleFilterBase<AnalogLowShelf<FP>> {
+struct LowShelfBase : AnalogPoleFilterBase<AnalogLowShelf> {
   void setup(int order, double sampleRate, double cutoffFrequency,
              double gainDb) {
     this->m_analogProto.design(order, gainDb);
@@ -166,8 +161,7 @@ struct LowShelfBase : AnalogPoleFilterBase<AnalogLowShelf<FP>> {
   }
 };
 
-template <typename FP>
-struct HighShelfBase : AnalogPoleFilterBase<AnalogLowShelf<FP>> {
+struct HighShelfBase : AnalogPoleFilterBase<AnalogLowShelf> {
   void setup(int order, double sampleRate, double cutoffFrequency,
              double gainDb) {
     this->m_analogProto.design(order, gainDb);
@@ -177,8 +171,7 @@ struct HighShelfBase : AnalogPoleFilterBase<AnalogLowShelf<FP>> {
   }
 };
 
-template <typename FP>
-struct BandShelfBase : AnalogPoleFilterBase<AnalogLowShelf<FP>> {
+struct BandShelfBase : AnalogPoleFilterBase<AnalogLowShelf> {
   void setup(int order, double sampleRate, double centerFrequency,
              double widthFrequency, double gainDb) {
     this->m_analogProto.design(order, gainDb);
@@ -400,3 +393,4 @@ struct BandShelf : OrderBase<MaxOrder, TypeIV, Butterworth::BandShelf>,
 }  // namespace Dsp
 
 #endif
+

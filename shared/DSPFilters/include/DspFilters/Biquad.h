@@ -52,7 +52,7 @@ namespace Dsp {
 class BiquadBase : protected Layout {
  public:
   // Calculate filter response at the given normalized frequency.
-  std::complex<double> response(const double& normalizedFrequency) const {
+  complex_t<double> response(const double& normalizedFrequency) const {
     const double a0 = getA0();
     const double a1 = getA1();
     const double a2 = getA2();
@@ -61,13 +61,13 @@ class BiquadBase : protected Layout {
     const double b2 = getB2();
 
     const double w = 2 * doublePi * normalizedFrequency;
-    const std::complex<double> czn1 = std::polar(1., -w);
-    const std::complex<double> czn2 = std::polar(1., -2 * w);
-    std::complex<double> ch(1);
-    std::complex<double> cbot(1);
+    const complex_t<double> czn1 = std::polar(1., -w);
+    const complex_t<double> czn2 = std::polar(1., -2 * w);
+    complex_t<double> ch(1);
+    complex_t<double> cbot(1);
 
-    std::complex<double> ct(b0 / a0);
-    std::complex<double> cb(1);
+    complex_t<double> ct(b0 / a0);
+    complex_t<double> cb(1);
     ct = addmul(ct, b1 / a0, czn1);
     ct = addmul(ct, b2 / a0, czn2);
     cb = addmul(cb, a1 / a0, czn1);
@@ -105,8 +105,8 @@ class BiquadBase : protected Layout {
   // These are protected so you can't mess with RBJ biquads
   //
 
-  void setCoefficients(const double& a0, const double& a1, const double& a2, const double& b0,
-                       const double& b1, const double& b2) {
+  void setCoefficients(const double& a0, const double& a1, const double& a2,
+                       const double& b0, const double& b1, const double& b2) {
     // #ifndef NDEBUG
     //     assert (!Dsp::is_nan(a0));
     //     assert (!Dsp::is_nan(b0));
@@ -129,7 +129,8 @@ class BiquadBase : protected Layout {
     }
   }
 
-  void setOnePole(const std::complex<double>& pole, const std::complex<double>& zero) {
+  void setOnePole(const complex_t<double>& pole,
+                  const complex_t<double>& zero) {
 #if 0
   pole = adjust_imag (pole);
   zero = adjust_imag (zero);
@@ -148,9 +149,10 @@ class BiquadBase : protected Layout {
     setCoefficients(a0, a1, a2, b0, b1, b2);
   }
 
-  void setTwoPole(const std::complex<double>& pole1, const std::complex<double>& zero1,
-                  const std::complex<double>& pole2,
-                  const std::complex<double>& zero2) {
+  void setTwoPole(const complex_t<double>& pole1,
+                  const complex_t<double>& zero1,
+                  const complex_t<double>& pole2,
+                  const complex_t<double>& zero2) {
 #if 0
   pole1 = adjust_imag (pole1);
   pole2 = adjust_imag (pole2);
@@ -241,8 +243,8 @@ struct BiquadPoleState : PoleZero<double> {
       zeros.second = 0;
     } else {
       {
-        const std::complex<double> c =
-            std::sqrt(std::complex<double>(a1 * a1 - 4 * a0 * a2, 0));
+        const complex_t<double> c =
+            std::sqrt(complex_t<double>(a1 * a1 - 4 * a0 * a2, 0));
         double d = 1. / (2. * a0);
         poles.first = -(a1 + c) * d;
         poles.second = (c - a1) * d;
@@ -250,8 +252,8 @@ struct BiquadPoleState : PoleZero<double> {
       }
 
       {
-        const std::complex<double> c =
-            sqrt(std::complex<double>(b1 * b1 - 4 * b0 * b2, 0));
+        const complex_t<double> c =
+            sqrt(complex_t<double>(b1 * b1 - 4 * b0 * b2, 0));
         double d = 1. / (2. * b0);
         zeros.first = -(b1 + c) * d;
         zeros.second = (c - b1) * d;
@@ -307,10 +309,10 @@ class Biquad : public BiquadBase {
                       BiquadPoleState zPrev) const {
     BiquadPoleState z(*this);
     double t = 1. / numSamples;
-    std::complex<double> dp0 = (z.poles.first - zPrev.poles.first) * t;
-    std::complex<double> dp1 = (z.poles.second - zPrev.poles.second) * t;
-    std::complex<double> dz0 = (z.zeros.first - zPrev.zeros.first) * t;
-    std::complex<double> dz1 = (z.zeros.second - zPrev.zeros.second) * t;
+    complex_t<double> dp0 = (z.poles.first - zPrev.poles.first) * t;
+    complex_t<double> dp1 = (z.poles.second - zPrev.poles.second) * t;
+    complex_t<double> dz0 = (z.zeros.first - zPrev.zeros.first) * t;
+    complex_t<double> dz1 = (z.zeros.second - zPrev.zeros.second) * t;
     double dg = (z.gain - zPrev.gain) * t;
 
     while (--numSamples >= 0) {
@@ -328,13 +330,15 @@ class Biquad : public BiquadBase {
  public:
   // Export these as public
 
-  void setOnePole(const std::complex<double>& pole, const std::complex<double>& zero) {
+  void setOnePole(const complex_t<double>& pole,
+                  const complex_t<double>& zero) {
     BiquadBase::setOnePole(pole, zero);
   }
 
-  void setTwoPole(const std::complex<double>& pole1, const std::complex<double>& zero1,
-                  const std::complex<double>& pole2,
-                  const std::complex<double>& zero2) {
+  void setTwoPole(const complex_t<double>& pole1,
+                  const complex_t<double>& zero1,
+                  const complex_t<double>& pole2,
+                  const complex_t<double>& zero2) {
     BiquadBase::setTwoPole(pole1, zero1, pole2, zero2);
   }
 

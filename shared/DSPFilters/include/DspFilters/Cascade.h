@@ -55,7 +55,7 @@ namespace Dsp {
 class Cascade {
  public:
   template <class StateType>
-  class StateBase : private DenormalPrevention<FP> {
+  class StateBase : private DenormalPrevention<StateType::SignalType> {
    public:
     template <typename Sample>
     inline Sample process(
@@ -187,14 +187,14 @@ class Cascade {
 //------------------------------------------------------------------------------
 
 // Storage for Cascade
-template <int MaxStages, typename FP>
+template <int MaxStages>
 class CascadeStages {
  public:
   template <class StateType>
-  class State : public Cascade<FP>::StateBase<StateType> {
+  class State : public Cascade::StateBase<StateType> {
    public:
-    State() : Cascade<FP>::StateBase<StateType>(m_states) {
-      Cascade<FP>::StateBase<StateType>::m_stateArray = m_states;
+    State() : Cascade::StateBase<StateType>(m_states) {
+      Cascade::StateBase<StateType>::m_stateArray = m_states;
       reset();
     }
 
@@ -208,12 +208,12 @@ class CascadeStages {
   };
 
   /*@Internal*/
-  Cascade<FP>::Storage getCascadeStorage() {
+  Cascade::Storage getCascadeStorage() {
     return Cascade<FP>::Storage(MaxStages, m_stages);
   }
 
  private:
-  Cascade<FP>::Stage m_stages[MaxStages];
+  Cascade::Stage m_stages[MaxStages];
 };
 
 }  // namespace Dsp
